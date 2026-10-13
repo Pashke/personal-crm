@@ -15,6 +15,7 @@ import {
   type ContactValues,
   type NoteFormState,
 } from "@/lib/contact-schema";
+import { describeError } from "@/lib/describe-error";
 
 export async function createContact(
   _prevState: ContactFormState,
@@ -34,7 +35,7 @@ export async function createContact(
       .returning({ id: contacts.id });
     id = row.id;
   } catch (error) {
-    console.error("Failed to create contact", error);
+    console.error("Failed to create contact", { error: describeError(error) });
     return { values, message: "Не удалось сохранить контакт. Попробуйте ещё раз." };
   }
 
@@ -66,7 +67,7 @@ export async function updateContact(
       return { values, message: "Контакт не найден — возможно, его удалили." };
     }
   } catch (error) {
-    console.error("Failed to update contact", { id, error });
+    console.error("Failed to update contact", { id, error: describeError(error) });
     return { values, message: "Не удалось сохранить изменения. Попробуйте ещё раз." };
   }
 
@@ -92,7 +93,7 @@ export async function addNote(
   try {
     await db.insert(notes).values({ contactId, body: parsed.data.body });
   } catch (error) {
-    console.error("Failed to add note", { contactId, error });
+    console.error("Failed to add note", { contactId, error: describeError(error) });
     return { body, error: "Не удалось сохранить заметку. Попробуйте ещё раз." };
   }
 

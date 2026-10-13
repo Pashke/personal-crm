@@ -6,6 +6,7 @@ import { cache } from "react";
 
 import { db } from "@/db";
 import { contacts, notes } from "@/db/schema";
+import { describeError } from "@/lib/describe-error";
 
 // Every read waits for a request: contacts change at runtime, so pages must never be
 // prerendered at build time with a frozen snapshot of the database.
@@ -19,17 +20,24 @@ export async function listContacts(query: string) {
     ? and(...words.map((word) => ilike(contacts.name, `%${escapeLike(word)}%`)))
     : undefined;
 
-  return db
-    .select({
-      id: contacts.id,
-      name: contacts.name,
-      howMet: contacts.howMet,
-      phone: contacts.phone,
-      email: contacts.email,
-    })
-    .from(contacts)
-    .where(filter)
-    .orderBy(sql`${contacts.name} collate "ru-x-icu"`, asc(contacts.id));
+  try {
+    return await db
+      .select({
+        id: contacts.id,
+        name: contacts.name,
+        howMet: contacts.howMet,
+        phone: contacts.phone,
+        email: contacts.email,
+      })
+      .from(contacts)
+      .where(filter)
+      .orderBy(sql`${contacts.name} collate "ru-x-icu"`, asc(contacts.id));
+  } catch (error) {
+    // The original error carries the search words, usually someone's name, and Next.js
+    // logs whatever a page throws. Rethrow a bare error so the error page still shows.
+    console.error("Failed to list contacts", { error: describeError(error) });
+    throw new Error("Failed to list contacts");
+  }
 }
 
 export async function countContacts() {
