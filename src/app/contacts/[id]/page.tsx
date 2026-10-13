@@ -32,7 +32,7 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-semibold">{contact.name}</CardTitle>
+          <CardTitle className="text-2xl font-semibold wrap-anywhere">{contact.name}</CardTitle>
           <CardAction>
             <Button asChild variant="outline">
               <Link href={`/contacts/${contact.id}/edit`}>
@@ -86,7 +86,7 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
                   >
                     {formatDateTime(note.createdAt)}
                   </time>
-                  <p className="mt-1 whitespace-pre-wrap">{note.body}</p>
+                  <p className="mt-1 whitespace-pre-wrap wrap-anywhere">{note.body}</p>
                 </li>
               ))}
             </ol>
@@ -113,7 +113,9 @@ function Detail({
       </span>
       <div className="min-w-0">
         <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd>{children || <span className="text-muted-foreground">—</span>}</dd>
+        <dd className="wrap-anywhere">
+          {children || <span className="text-muted-foreground">—</span>}
+        </dd>
       </div>
     </div>
   );

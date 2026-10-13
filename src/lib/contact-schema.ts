@@ -35,6 +35,8 @@ export type ContactFormState = {
 
 export type NoteFormState = {
   error?: string;
+  // The submitted text, returned on failure so the form can show it again after React resets it.
+  body?: string;
   // Changes on every successful save so the form can react to it.
   savedAt?: number;
 };
