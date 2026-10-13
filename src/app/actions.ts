@@ -80,19 +80,20 @@ export async function addNote(
   _prevState: NoteFormState,
   formData: FormData,
 ): Promise<NoteFormState> {
+  const body = String(formData.get("body") ?? "");
   if (!isValidId(contactId)) {
-    return { error: "Контакт не найден." };
+    return { body, error: "Контакт не найден." };
   }
-  const parsed = noteSchema.safeParse({ body: String(formData.get("body") ?? "") });
+  const parsed = noteSchema.safeParse({ body });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Проверьте текст заметки" };
+    return { body, error: parsed.error.issues[0]?.message ?? "Проверьте текст заметки" };
   }
 
   try {
     await db.insert(notes).values({ contactId, body: parsed.data.body });
   } catch (error) {
     console.error("Failed to add note", { contactId, error });
-    return { error: "Не удалось сохранить заметку. Попробуйте ещё раз." };
+    return { body, error: "Не удалось сохранить заметку. Попробуйте ещё раз." };
   }
 
   revalidatePath(`/contacts/${contactId}`);

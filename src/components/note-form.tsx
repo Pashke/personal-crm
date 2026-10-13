@@ -30,6 +30,7 @@ export function NoteForm({ action }: NoteFormProps) {
         required
         rows={3}
         placeholder="О чём поговорили, о чём договорились…"
+        defaultValue={state.body}
         aria-invalid={state.error ? true : undefined}
         className="text-base md:text-sm"
         onKeyDown={(event) => {
