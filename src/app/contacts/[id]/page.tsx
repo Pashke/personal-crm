@@ -33,7 +33,7 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
         <BackLink href="/">Все контакты</BackLink>
 
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-          <h1 className="min-w-0 font-display text-title font-bold text-balance wrap-break-word uppercase">
+          <h1 className="min-w-0 font-display text-title font-bold text-balance wrap-anywhere uppercase">
             {contact.name}
           </h1>
           <Button asChild variant="outline">
@@ -78,7 +78,7 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
                 >
                   {formatDateTime(note.createdAt)}
                 </time>
-                <p className="whitespace-pre-wrap text-pretty">{note.body}</p>
+                <p className="whitespace-pre-wrap text-pretty wrap-anywhere">{note.body}</p>
               </li>
             ))}
           </ol>
@@ -94,7 +94,9 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
       <dt className="font-display text-label font-medium text-accent uppercase md:w-48 md:shrink-0">
         {label}
       </dt>
-      <dd className="min-w-0">{children || <span className="text-muted-foreground">—</span>}</dd>
+      <dd className="min-w-0 wrap-anywhere">
+        {children || <span className="text-muted-foreground">—</span>}
+      </dd>
     </div>
   );
 }
