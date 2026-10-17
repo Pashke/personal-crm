@@ -4,7 +4,7 @@ import { and, asc, count, desc, eq, ilike, sql } from "drizzle-orm";
 import { connection } from "next/server";
 import { cache } from "react";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { contacts, notes } from "@/db/schema";
 
 // Every read waits for a request: contacts change at runtime, so pages must never be
@@ -19,7 +19,7 @@ export async function listContacts(query: string) {
     ? and(...words.map((word) => ilike(contacts.name, `%${escapeLike(word)}%`)))
     : undefined;
 
-  return db
+  return getDb()
     .select({
       id: contacts.id,
       name: contacts.name,
@@ -34,20 +34,20 @@ export async function listContacts(query: string) {
 
 export async function countContacts() {
   await connection();
-  const [row] = await db.select({ value: count() }).from(contacts);
+  const [row] = await getDb().select({ value: count() }).from(contacts);
   return row.value;
 }
 
 // Wrapped in cache() so the page and its metadata share one query per request.
 export const getContact = cache(async (id: number) => {
   await connection();
-  const [contact] = await db.select().from(contacts).where(eq(contacts.id, id));
+  const [contact] = await getDb().select().from(contacts).where(eq(contacts.id, id));
   return contact ?? null;
 });
 
 export async function listNotes(contactId: number) {
   await connection();
-  return db
+  return getDb()
     .select()
     .from(notes)
     .where(eq(notes.contactId, contactId))

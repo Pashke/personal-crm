@@ -1,17 +1,19 @@
 import "server-only";
 
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import { getDatabaseConfig } from "./config";
 import * as schema from "./schema";
 
-// Reuse one pool across hot reloads in development instead of opening new connections each time.
-const globalForDb = globalThis as unknown as { pgPool?: Pool };
+type Db = NodePgDatabase<typeof schema>;
 
-const pool = globalForDb.pgPool ?? new Pool(getDatabaseConfig());
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.pgPool = pool;
+// One connection pool per server process, created on first use rather than on import:
+// `next build` loads this module without database credentials (they exist only on the server).
+// Kept on globalThis so hot reloads in development reuse it instead of opening new connections.
+const globalForDb = globalThis as unknown as { db?: Db };
+
+export function getDb(): Db {
+  globalForDb.db ??= drizzle(new Pool(getDatabaseConfig()), { schema });
+  return globalForDb.db;
 }
-
-export const db = drizzle(pool, { schema });

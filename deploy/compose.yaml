@@ -1,0 +1,75 @@
+# Production stack on the server, docker compose project "prod".
+# Do not run docker compose on this file directly: use deploy/deploy.sh (deploys a version)
+# or deploy/compose.sh (manual commands). They set the project name, the env file
+# and APP_IMAGE, the app image to run.
+#
+# Credentials come from /home/deploy/personal-crm/.env (mode 600):
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+
+x-logging: &logging
+  # Container logs are capped: 3 files of 10 MB per container.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-db-credentials: &db-credentials
+  POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is not set in .env}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set in .env}
+  POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is not set in .env}
+
+# Shared by the app and the one-off containers made from the same image.
+x-app-base: &app-base
+  image: ${APP_IMAGE:?APP_IMAGE is not set, run this stack through deploy/deploy.sh or deploy/compose.sh}
+  environment:
+    <<: *db-credentials
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: "5432"
+  depends_on:
+    postgres:
+      condition: service_healthy
+  logging: *logging
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment: *db-credentials
+    # No published port: only containers of this project can reach the database.
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  app:
+    <<: *app-base
+    restart: unless-stopped
+    # Only nginx on the same server reaches the app, the port is not open to the internet.
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 2s
+
+  # One-off: applies database migrations and exits. deploy.sh runs it before starting a new app version.
+  migrate:
+    <<: *app-base
+    profiles: ["tools"]
+    command: ["drizzle-kit", "migrate"]
+
+  # One-off, by hand only: fills an empty database with test contacts.
+  seed:
+    <<: *app-base
+    profiles: ["tools"]
+    command: ["tsx", "scripts/seed.ts"]
+
+volumes:
+  postgres-data:

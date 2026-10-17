@@ -1,0 +1,22 @@
+# Files that never go into the image build.
+# Secrets: the image must not contain any env file, the server passes credentials at runtime.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Built and installed inside the image, local copies are not needed
+node_modules
+.next
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# Not part of the app
+.git
+.github
+.claude
+deploy
+specs
+*.md
+Dockerfile
+.dockerignore

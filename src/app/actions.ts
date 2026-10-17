@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { contacts, notes } from "@/db/schema";
 import {
   contactSchema,
@@ -28,7 +28,7 @@ export async function createContact(
 
   let id: number;
   try {
-    const [row] = await db
+    const [row] = await getDb()
       .insert(contacts)
       .values(toContactRow(parsed.data))
       .returning({ id: contacts.id });
@@ -57,7 +57,7 @@ export async function updateContact(
   }
 
   try {
-    const updated = await db
+    const updated = await getDb()
       .update(contacts)
       .set({ ...toContactRow(parsed.data), updatedAt: new Date() })
       .where(eq(contacts.id, id))
@@ -89,7 +89,7 @@ export async function addNote(
   }
 
   try {
-    await db.insert(notes).values({ contactId, body: parsed.data.body });
+    await getDb().insert(notes).values({ contactId, body: parsed.data.body });
   } catch (error) {
     console.error("Failed to add note", { contactId, error });
     return { error: "Не удалось сохранить заметку. Попробуйте ещё раз." };
