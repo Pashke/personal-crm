@@ -1,13 +1,12 @@
-import { ArrowLeftIcon } from "lucide-react";
 import Link from "next/link";
 
 export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      className="inline-flex items-center gap-2 self-start font-display text-label font-medium text-accent uppercase underline-offset-4 hover:underline"
     >
-      <ArrowLeftIcon className="size-4" />
+      <span aria-hidden>←</span>
       {children}
     </Link>
   );

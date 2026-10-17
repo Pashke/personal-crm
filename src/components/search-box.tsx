@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2Icon, SearchIcon } from "lucide-react";
+import { Loader2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 
@@ -45,7 +45,11 @@ export function SearchBox({ initialQuery }: { initialQuery: string }) {
         search(inputRef.current?.value ?? "");
       }}
     >
-      <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+      {/* The landing's search mark: a small ring instead of an icon */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 left-3.5 size-3 -translate-y-1/2 rounded-full border-2 border-popover-foreground md:left-4.5 md:size-3.5"
+      />
       <Input
         ref={inputRef}
         type="search"
@@ -54,7 +58,7 @@ export function SearchBox({ initialQuery }: { initialQuery: string }) {
         placeholder="Найти по имени"
         aria-label="Найти контакт по имени"
         autoComplete="off"
-        className="h-10 pr-9 pl-9 text-base md:text-sm"
+        className="pr-10 pl-9 md:pr-12 md:pl-11"
         onChange={(event) => {
           const value = event.target.value;
           clearTimer(timerRef);
@@ -64,7 +68,7 @@ export function SearchBox({ initialQuery }: { initialQuery: string }) {
       {isPending && (
         <Loader2Icon
           aria-label="Ищу…"
-          className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
+          className="absolute top-1/2 right-3.5 size-4 -translate-y-1/2 animate-spin text-popover-foreground md:right-4.5"
         />
       )}
     </form>

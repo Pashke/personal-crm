@@ -37,12 +37,12 @@ export function ContactForm({ action, initialValues, submitLabel, cancelHref }: 
   const [state, formAction, pending] = useActionState(action, { values: initialValues });
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="flex max-w-xl flex-col gap-5 md:gap-6">
       {fields.map((field) => {
         const error = state.errors?.[field.name];
         const errorId = `${field.name}-error`;
         return (
-          <div key={field.name} className="space-y-2">
+          <div key={field.name} className="flex flex-col gap-2">
             <Label htmlFor={field.name}>
               {field.label}
               {field.required && <span className="text-destructive">*</span>}
@@ -59,10 +59,9 @@ export function ContactForm({ action, initialValues, submitLabel, cancelHref }: 
               defaultValue={state.values[field.name]}
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? errorId : undefined}
-              className="h-10 text-base md:text-sm"
             />
             {error && (
-              <p id={errorId} className="text-sm text-destructive">
+              <p id={errorId} className="text-meta text-destructive">
                 {error}
               </p>
             )}
@@ -71,12 +70,12 @@ export function ContactForm({ action, initialValues, submitLabel, cancelHref }: 
       })}
 
       {state.message && (
-        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p role="alert" className="rounded-sm border border-destructive px-3.5 py-2.5 text-meta text-destructive">
           {state.message}
         </p>
       )}
 
-      <div className="flex gap-2">
+      <div className="mt-1 flex flex-col gap-3 sm:flex-row">
         <Button type="submit" size="lg" disabled={pending}>
           {pending ? "Сохраняю…" : submitLabel}
         </Button>

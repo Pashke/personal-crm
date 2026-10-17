@@ -1,4 +1,3 @@
-import { MailIcon, PencilIcon, PhoneIcon, UsersIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,7 +6,6 @@ import { addNote } from "@/app/actions";
 import { BackLink } from "@/components/back-link";
 import { NoteForm } from "@/components/note-form";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getContact, listNotes, parseContactId } from "@/lib/contacts";
 import { formatDateTime } from "@/lib/format";
 
@@ -19,6 +17,9 @@ export async function generateMetadata({
   return { title: contact?.name ?? "Контакт не найден" };
 }
 
+const linkClass =
+  "underline decoration-border underline-offset-4 transition-colors hover:decoration-accent";
+
 export default async function ContactPage({ params }: PageProps<"/contacts/[id]">) {
   const id = parseContactId((await params).id);
   if (!id) notFound();
@@ -27,94 +28,73 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
   if (!contact) notFound();
 
   return (
-    <div className="space-y-4">
-      <BackLink href="/">Все контакты</BackLink>
+    <div className="flex flex-col gap-10 md:gap-14">
+      <section className="flex flex-col gap-5 md:gap-6">
+        <BackLink href="/">Все контакты</BackLink>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold">{contact.name}</CardTitle>
-          <CardAction>
-            <Button asChild variant="outline">
-              <Link href={`/contacts/${contact.id}/edit`}>
-                <PencilIcon />
-                Изменить
-              </Link>
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          <dl className="space-y-3">
-            <Detail icon={<UsersIcon />} label="Откуда знакомы">
-              {contact.howMet}
-            </Detail>
-            <Detail icon={<PhoneIcon />} label="Телефон">
-              {contact.phone && (
-                <a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`} className="hover:underline">
-                  {contact.phone}
-                </a>
-              )}
-            </Detail>
-            <Detail icon={<MailIcon />} label="Почта">
-              {contact.email && (
-                <a href={`mailto:${contact.email}`} className="break-all hover:underline">
-                  {contact.email}
-                </a>
-              )}
-            </Detail>
-          </dl>
-        </CardContent>
-      </Card>
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <h1 className="min-w-0 font-display text-title font-bold text-balance wrap-break-word uppercase">
+            {contact.name}
+          </h1>
+          <Button asChild variant="outline">
+            <Link href={`/contacts/${contact.id}/edit`}>Изменить</Link>
+          </Button>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold">Заметки</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <NoteForm action={addNote.bind(null, contact.id)} />
+        <dl className="border-t-2 border-accent">
+          <Detail label="Откуда знакомы">{contact.howMet}</Detail>
+          <Detail label="Телефон">
+            {contact.phone && (
+              <a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`} className={linkClass}>
+                {contact.phone}
+              </a>
+            )}
+          </Detail>
+          <Detail label="Почта">
+            {contact.email && (
+              <a href={`mailto:${contact.email}`} className={`break-all ${linkClass}`}>
+                {contact.email}
+              </a>
+            )}
+          </Detail>
+        </dl>
+      </section>
 
-          {contactNotes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Заметок пока нет. Запишите, о чём говорили и о чём договорились.
-            </p>
-          ) : (
-            <ol className="space-y-4">
-              {contactNotes.map((note) => (
-                <li key={note.id} className="border-l-2 pl-4">
-                  <time
-                    dateTime={note.createdAt.toISOString()}
-                    className="block text-xs text-muted-foreground"
-                  >
-                    {formatDateTime(note.createdAt)}
-                  </time>
-                  <p className="mt-1 whitespace-pre-wrap">{note.body}</p>
-                </li>
-              ))}
-            </ol>
-          )}
-        </CardContent>
-      </Card>
+      <section className="flex flex-col gap-5 md:gap-6">
+        <h2 className="font-display text-heading font-bold uppercase">Заметки</h2>
+        <NoteForm action={addNote.bind(null, contact.id)} />
+
+        {contactNotes.length === 0 ? (
+          <p className="font-hand text-note font-medium text-accent">
+            Заметок пока нет. Запишите, о чём говорили и о чём договорились.
+          </p>
+        ) : (
+          <ol className="border-t-2 border-accent">
+            {contactNotes.map((note) => (
+              <li key={note.id} className="flex flex-col gap-1.5 border-b py-4 md:py-5">
+                <time
+                  dateTime={note.createdAt.toISOString()}
+                  className="font-display text-label font-medium text-muted-foreground uppercase"
+                >
+                  {formatDateTime(note.createdAt)}
+                </time>
+                <p className="whitespace-pre-wrap text-pretty">{note.body}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
     </div>
   );
 }
 
-function Detail({
-  icon,
-  label,
-  children,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  children: React.ReactNode;
-}) {
+function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex gap-3">
-      <span className="mt-0.5 text-muted-foreground [&_svg]:size-4" aria-hidden>
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd>{children || <span className="text-muted-foreground">—</span>}</dd>
-      </div>
+    <div className="flex flex-col gap-1 border-b py-3.5 md:flex-row md:items-baseline md:gap-6 md:py-4">
+      <dt className="font-display text-label font-medium text-accent uppercase md:w-48 md:shrink-0">
+        {label}
+      </dt>
+      <dd className="min-w-0">{children || <span className="text-muted-foreground">—</span>}</dd>
     </div>
   );
 }

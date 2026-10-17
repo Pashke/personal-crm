@@ -28,18 +28,21 @@ const Toaster = ({ ...props }: ToasterProps) => {
           <Loader2Icon className="size-4 animate-spin" />
         ),
       }}
+      // A cream note on the forest page, in the app's text font.
       style={
         {
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
+          "--normal-border": "var(--popover)",
+          "--border-radius": "var(--radius-sm)",
         } as React.CSSProperties
       }
       toastOptions={{
         classNames: {
           toast: "cn-toast",
         },
+        // Inline, because sonner's own stylesheet would win over a utility class.
+        style: { fontFamily: "var(--font-text)", fontSize: "var(--text-body)" },
       }}
       {...props}
     />

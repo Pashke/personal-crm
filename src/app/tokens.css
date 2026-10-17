@@ -1,0 +1,106 @@
+/*
+ * Design tokens: the only place for colors, fonts, type sizes, spacing and radii.
+ * Palette, fonts and radii are the landing's (personal-crm-landing/src/styles/tokens.css),
+ * so the app and the landing look like one product. The type scale is sized for app screens.
+ *
+ * Tailwind's default palette, fonts, type scale and radii are removed,
+ * so components can only use the values below.
+ */
+
+@theme {
+  /* Colors, same as the landing */
+  --color-*: initial;
+  --color-forest: #24392f;
+  --color-line-dark: #4d6b5b;
+  --color-cream: #f3ead6;
+  --color-gold: #e6c46a;
+  --color-muted-dark: #d9d1bd;
+  --color-muted-dark-2: #b9c7b8;
+  --color-muted-light: #4a5a50;
+  --color-line-light: #c9bc9f;
+  --color-rust: oklch(0.55 0.15 38);
+  --color-rust-ink: #fbf3e2;
+  /* App only: error text on the forest background, where rust itself is too dark to read */
+  --color-rust-light: oklch(0.8 0.1 38);
+
+  /* Font families (the font files themselves are set up in layout.tsx) */
+  --font-*: initial;
+  --font-display: var(--font-oswald);
+  --font-text: var(--font-pt-serif);
+  --font-hand: var(--font-caveat);
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+
+  /*
+   * Type scale, mobile values. Desktop values are below, in the `md` block,
+   * so `text-title` and friends adapt to the screen on their own.
+   */
+  --text-*: initial;
+  --leading-*: initial;
+  --tracking-*: initial;
+
+  /* Page title: Oswald 700, uppercase */
+  --text-title: 34px;
+  --text-title--line-height: 1.05;
+  --text-title--letter-spacing: -0.005em;
+  /* Section title inside a page ("Заметки") */
+  --text-heading: 24px;
+  --text-heading--line-height: 1.1;
+
+  --text-label: 13px;
+  --text-label--line-height: normal;
+  --text-label--letter-spacing: 0.18em;
+  --text-button: 16px;
+  --text-button--line-height: normal;
+  --text-button--letter-spacing: 0.12em;
+  --text-initials: 14px;
+  --text-initials--line-height: normal;
+
+  --text-body: 16px;
+  --text-body--line-height: 1.5;
+  /* Inputs: at least 16px, or phones zoom in on focus */
+  --text-field: 16px;
+  --text-field--line-height: 1.4;
+  --text-name: 15px;
+  --text-name--line-height: 1.35;
+  --text-meta: 13px;
+  --text-meta--line-height: 1.35;
+
+  /* Handwritten notes (Caveat) */
+  --text-note: 20px;
+  --text-note--line-height: 1.2;
+
+  /* Spacing: Tailwind's 4px step (`p-4` is 16px), plus the landing's fluid frame padding */
+  --spacing-frame: clamp(14px, 2vw, 24px);
+  --spacing-frame-x: clamp(18px, 4vw, 56px);
+  --spacing-frame-y: clamp(18px, 3vw, 36px);
+
+  /* Radii */
+  --radius-*: initial;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+/* Type scale, desktop values */
+:root {
+  @variant md {
+    --text-title: 44px;
+    --text-heading: 28px;
+
+    --text-label: 14px;
+    --text-initials: 16px;
+
+    --text-body: 17px;
+    --text-body--line-height: 1.55;
+    --text-field: 18px;
+    --text-name: 17px;
+    --text-meta: 14px;
+    --text-meta--line-height: 1.4;
+
+    --text-note: 24px;
+  }
+}

@@ -20,7 +20,7 @@ export function NoteForm({ action }: NoteFormProps) {
   }, [state.savedAt]);
 
   return (
-    <form action={formAction} className="space-y-2">
+    <form action={formAction} className="flex flex-col gap-3">
       <Label htmlFor="note-body" className="sr-only">
         Новая заметка
       </Label>
@@ -31,7 +31,6 @@ export function NoteForm({ action }: NoteFormProps) {
         rows={3}
         placeholder="О чём поговорили, о чём договорились…"
         aria-invalid={state.error ? true : undefined}
-        className="text-base md:text-sm"
         onKeyDown={(event) => {
           // Ctrl+Enter (Cmd+Enter on Mac) saves the note without reaching for the mouse.
           if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
@@ -40,12 +39,13 @@ export function NoteForm({ action }: NoteFormProps) {
           }
         }}
       />
-      {state.error && <p className="text-sm text-destructive">{state.error}</p>}
-      <div className="flex items-center gap-3">
+      {state.error && <p className="text-meta text-destructive">{state.error}</p>}
+      <div className="flex items-center gap-5">
         <Button type="submit" disabled={pending}>
           {pending ? "Сохраняю…" : "Добавить заметку"}
         </Button>
-        <span className="hidden text-xs text-muted-foreground sm:inline">или Ctrl+Enter</span>
+        {/* A handwritten side note, like «Бесплатно» next to the landing's button */}
+        <span className="hidden font-hand text-note font-medium text-accent sm:inline">или Ctrl+Enter</span>
       </div>
     </form>
   );
