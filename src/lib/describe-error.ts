@@ -20,3 +20,14 @@ export function describeError(error: unknown) {
   }
   return chain;
 }
+
+// SQLSTATE 23503 foreign_key_violation, e.g. a note for a contact deleted in another tab.
+// Drizzle puts the driver error on `cause`, so the whole chain is checked.
+export function isForeignKeyViolation(error: unknown) {
+  let current = error;
+  for (let depth = 0; current instanceof Error && depth < MAX_DEPTH; depth++) {
+    if (Reflect.get(current, "code") === "23503") return true;
+    current = current.cause;
+  }
+  return false;
+}

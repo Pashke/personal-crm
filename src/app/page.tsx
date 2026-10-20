@@ -1,13 +1,14 @@
 import Link from "next/link";
 
 import { AddedContactNotice } from "@/components/added-contact-notice";
+import { DeletedContactNotice } from "@/components/deleted-contact-notice";
 import { SearchBox } from "@/components/search-box";
 import { Button } from "@/components/ui/button";
 import { countContacts, listContacts } from "@/lib/contacts";
 import { formatCount, initials, pluralize, splitMatches } from "@/lib/format";
 
 export default async function ContactsPage({ searchParams }: PageProps<"/">) {
-  const { q, added } = await searchParams;
+  const { q, added, deleted } = await searchParams;
   const query = typeof q === "string" ? q.trim() : "";
   const addedId = typeof added === "string" ? Number(added) : null;
 
@@ -61,6 +62,7 @@ export default async function ContactsPage({ searchParams }: PageProps<"/">) {
       )}
 
       {addedContact && <AddedContactNotice id={addedContact.id} name={addedContact.name} />}
+      {deleted === "1" && <DeletedContactNotice />}
     </div>
   );
 }

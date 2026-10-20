@@ -2,7 +2,7 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, RedirectType } from "next/navigation";
 import { z } from "zod";
 
 import { getDb } from "@/db";
@@ -13,9 +13,10 @@ import {
   type ContactField,
   type ContactFormState,
   type ContactValues,
+  type DeleteContactState,
   type NoteFormState,
 } from "@/lib/contact-schema";
-import { describeError } from "@/lib/describe-error";
+import { describeError, isForeignKeyViolation } from "@/lib/describe-error";
 
 export async function createContact(
   _prevState: ContactFormState,
@@ -76,6 +77,27 @@ export async function updateContact(
   redirect(`/contacts/${id}`);
 }
 
+export async function deleteContact(id: number): Promise<DeleteContactState> {
+  if (!isValidId(id)) {
+    return { error: "Контакт не найден." };
+  }
+
+  try {
+    // Notes go with the contact: notes.contact_id is ON DELETE CASCADE.
+    // Zero deleted rows means another tab got there first, which ends the same way.
+    await getDb().delete(contacts).where(eq(contacts.id, id));
+  } catch (error) {
+    console.error("Failed to delete contact", { id, error: describeError(error) });
+    return { error: "Не удалось удалить контакт. Попробуйте ещё раз." };
+  }
+
+  revalidatePath("/");
+  revalidatePath(`/contacts/${id}`);
+  // The name stays out of the URL: it would end up in the server's access logs.
+  // Replace, so Back does not return to the page of a contact that no longer exists.
+  redirect("/?deleted=1", RedirectType.replace);
+}
+
 export async function addNote(
   contactId: number,
   _prevState: NoteFormState,
@@ -93,6 +115,9 @@ export async function addNote(
   try {
     await getDb().insert(notes).values({ contactId, body: parsed.data.body });
   } catch (error) {
+    if (isForeignKeyViolation(error)) {
+      return { body, error: "Контакт не найден — возможно, его удалили." };
+    }
     console.error("Failed to add note", { contactId, error: describeError(error) });
     return { body, error: "Не удалось сохранить заметку. Попробуйте ещё раз." };
   }
