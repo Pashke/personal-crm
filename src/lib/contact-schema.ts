@@ -40,3 +40,8 @@ export type NoteFormState = {
   // Changes on every successful save so the form can react to it.
   savedAt?: number;
 };
+
+// A successful delete redirects to the list, so only a failure comes back as state.
+export type DeleteContactState = {
+  error?: string;
+};

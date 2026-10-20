@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { addNote } from "@/app/actions";
+import { addNote, deleteContact } from "@/app/actions";
 import { BackLink } from "@/components/back-link";
+import { DeleteContactButton } from "@/components/delete-contact-button";
 import { NoteForm } from "@/components/note-form";
 import { Button } from "@/components/ui/button";
 import { getContact, listNotes, parseContactId } from "@/lib/contacts";
@@ -36,9 +37,16 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
           <h1 className="min-w-0 font-display text-title font-bold text-balance wrap-anywhere uppercase">
             {contact.name}
           </h1>
-          <Button asChild variant="outline">
-            <Link href={`/contacts/${contact.id}/edit`}>Изменить</Link>
-          </Button>
+          <div className="flex gap-3">
+            <Button asChild variant="outline">
+              <Link href={`/contacts/${contact.id}/edit`}>Изменить</Link>
+            </Button>
+            <DeleteContactButton
+              action={deleteContact.bind(null, contact.id)}
+              name={contact.name}
+              noteCount={contactNotes.length}
+            />
+          </div>
         </div>
 
         <dl className="border-t-2 border-accent">
