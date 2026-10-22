@@ -1,3 +1,5 @@
+import type { ContactFrequency } from "@/db/schema";
+
 // Picks the Russian plural form: 1 контакт, 2 контакта, 5 контактов.
 export function pluralize(count: number, forms: [one: string, few: string, many: string]) {
   const mod10 = count % 10;
@@ -21,6 +23,78 @@ const dateTimeFormat = new Intl.DateTimeFormat("ru-RU", {
 
 export function formatDateTime(date: Date) {
   return dateTimeFormat.format(date);
+}
+
+// Labels for the frequencies from src/db/schema.ts, in the order the form shows them.
+export const frequencyLabels: Record<ContactFrequency, string> = {
+  week: "Раз в неделю",
+  month: "Раз в месяц",
+  quarter: "Раз в квартал",
+  year: "Раз в год",
+};
+
+// The same label in the middle of a line: "Анна · раз в неделю · …".
+export function frequencyLabelInline(frequency: ContactFrequency) {
+  return frequencyLabels[frequency].toLowerCase();
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Whole 24-hour periods from one moment to another: a note from yesterday 23:00 is
+// "0 days" ago at 09:00 today.
+function fullDaysBetween(from: Date, to: Date) {
+  return Math.floor((to.getTime() - from.getTime()) / DAY_MS);
+}
+
+function formatDays(days: number) {
+  return `${days} ${pluralize(days, ["день", "дня", "дней"])}`;
+}
+
+// Adds calendar months like Postgres does: 31 Jan + 1 month = 28/29 Feb.
+function addMonths(date: Date, months: number) {
+  const result = new Date(date);
+  const day = result.getDate();
+  result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(day, lastDay));
+  return result;
+}
+
+function fullMonthsBetween(from: Date, to: Date) {
+  let months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+  if (addMonths(from, months) > to) months--;
+  return months;
+}
+
+// How long ago the last note was: under 60 days in days, then in whole months,
+// from 2 years in whole years. No notes yet: "ещё не общались".
+export function formatLastContact(lastNoteAt: Date | null, now: Date) {
+  if (!lastNoteAt) return "ещё не общались";
+
+  const days = fullDaysBetween(lastNoteAt, now);
+  if (days < 60) return `последний раз ${formatDays(days)} назад`;
+
+  const months = fullMonthsBetween(lastNoteAt, now);
+  if (months < 24) return `последний раз ${months} ${pluralize(months, ["месяц", "месяца", "месяцев"])} назад`;
+
+  const years = Math.floor(months / 12);
+  return `последний раз ${years} ${pluralize(years, ["год", "года", "лет"])} назад`;
+}
+
+const dayMonthFormat = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" });
+
+// When to get in touch: "следующий раз до 15 ноября" (the year only when it is not the
+// current one), or, once the due date has come, "пора было 3 дня назад" / "пора сегодня".
+export function formatDueStatus(dueAt: Date, now: Date) {
+  if (dueAt > now) {
+    const date = dayMonthFormat.format(dueAt);
+    const year = dueAt.getFullYear();
+    return `следующий раз до ${year === now.getFullYear() ? date : `${date} ${year}`}`;
+  }
+
+  const days = fullDaysBetween(dueAt, now);
+  return days === 0 ? "пора сегодня" : `пора было ${formatDays(days)} назад`;
 }
 
 // "Анна Соколова" → "АС": the first letters of the first two words.

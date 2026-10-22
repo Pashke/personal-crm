@@ -8,7 +8,7 @@ import { DeleteContactButton } from "@/components/delete-contact-button";
 import { NoteForm } from "@/components/note-form";
 import { Button } from "@/components/ui/button";
 import { getContact, listNotes, parseContactId } from "@/lib/contacts";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatDueStatus, frequencyLabels } from "@/lib/format";
 
 export async function generateMetadata({
   params,
@@ -27,6 +27,10 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
 
   const [contact, contactNotes] = await Promise.all([getContact(id), listNotes(id)]);
   if (!contact) notFound();
+
+  // The due date is read from the database on every request, so "now" is this request's moment.
+  const now = new Date();
+  const overdue = contact.dueAt !== null && contact.dueAt <= now;
 
   return (
     <div className="flex flex-col gap-10 md:gap-14">
@@ -63,6 +67,16 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
               <a href={`mailto:${contact.email}`} className={`break-all ${linkClass}`}>
                 {contact.email}
               </a>
+            )}
+          </Detail>
+          <Detail label="Как часто общаться">
+            {contact.contactFrequency && contact.dueAt && (
+              <>
+                {frequencyLabels[contact.contactFrequency]} ·{" "}
+                <span className={overdue ? "font-bold text-accent" : undefined}>
+                  {formatDueStatus(contact.dueAt, now)}
+                </span>
+              </>
             )}
           </Detail>
         </dl>
