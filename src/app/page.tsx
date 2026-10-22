@@ -2,18 +2,41 @@ import Link from "next/link";
 
 import { AddedContactNotice } from "@/components/added-contact-notice";
 import { DeletedContactNotice } from "@/components/deleted-contact-notice";
+import { DueContacts, type DueContactRow } from "@/components/due-contacts";
 import { SearchBox } from "@/components/search-box";
 import { Button } from "@/components/ui/button";
-import { countContacts, listContacts } from "@/lib/contacts";
-import { formatCount, initials, pluralize, splitMatches } from "@/lib/format";
+import { countContacts, listContacts, listDueContacts } from "@/lib/contacts";
+import {
+  formatCount,
+  formatLastContact,
+  frequencyLabelInline,
+  initials,
+  pluralize,
+  splitMatches,
+} from "@/lib/format";
 
 export default async function ContactsPage({ searchParams }: PageProps<"/">) {
   const { q, added, deleted } = await searchParams;
   const query = typeof q === "string" ? q.trim() : "";
   const addedId = typeof added === "string" ? Number(added) : null;
 
-  const [items, total] = await Promise.all([listContacts(query), countContacts()]);
+  // «Пора связаться» is hidden during a search, so it is not even queried then.
+  const [items, total, due] = await Promise.all([
+    listContacts(query),
+    countContacts(),
+    query ? [] : listDueContacts(),
+  ]);
   const addedContact = addedId ? items.find((item) => item.id === addedId) : undefined;
+
+  // The texts are worded here, at the moment of this request, so the browser gets them ready.
+  const now = new Date();
+  const dueRows: DueContactRow[] = due.map((contact) => ({
+    id: contact.id,
+    name: contact.name,
+    initials: initials(contact.name),
+    frequency: frequencyLabelInline(contact.contactFrequency),
+    lastContact: formatLastContact(contact.lastNoteAt, now),
+  }));
 
   return (
     <div className="flex flex-col gap-5 md:gap-6">
@@ -30,6 +53,8 @@ export default async function ContactsPage({ searchParams }: PageProps<"/">) {
           <Link href="/contacts/new">Добавить контакт</Link>
         </Button>
       </div>
+
+      {dueRows.length > 0 && <DueContacts rows={dueRows} />}
 
       <SearchBox initialQuery={query} />
 

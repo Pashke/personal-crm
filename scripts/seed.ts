@@ -7,7 +7,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import { getDatabaseConfig } from "../src/db/config";
-import { contacts, notes } from "../src/db/schema";
+import { contacts, notes, type ContactFrequency } from "../src/db/schema";
 
 const CONTACT_COUNT = 1000;
 
@@ -163,6 +163,18 @@ function makeEmail(firstName: string, lastName: string, used: Set<string>) {
   return email;
 }
 
+// About a third of contacts get a frequency, mostly a month or a quarter. Contacts date back
+// to 2021, so many of them are overdue at once and «Пора связаться» has rows to check.
+function makeFrequency(): ContactFrequency | null {
+  if (!faker.datatype.boolean({ probability: 0.33 })) return null;
+  return faker.helpers.weightedArrayElement<ContactFrequency>([
+    { weight: 2, value: "week" },
+    { weight: 4, value: "month" },
+    { weight: 3, value: "quarter" },
+    { weight: 1, value: "year" },
+  ]);
+}
+
 function makePhone() {
   const digits = (n: number) => faker.string.numeric(n);
   return `+7 9${digits(2)} ${digits(3)}-${digits(2)}-${digits(2)}`;
@@ -201,6 +213,7 @@ async function main() {
           email: faker.datatype.boolean({ probability: 0.7 })
             ? makeEmail(firstName, lastName, usedEmails)
             : null,
+          contactFrequency: makeFrequency(),
           createdAt,
           updatedAt: createdAt,
         },

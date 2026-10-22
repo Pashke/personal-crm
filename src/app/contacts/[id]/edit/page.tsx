@@ -28,6 +28,7 @@ export default async function EditContactPage({ params }: PageProps<"/contacts/[
           howMet: contact.howMet ?? "",
           phone: contact.phone ?? "",
           email: contact.email ?? "",
+          contactFrequency: contact.contactFrequency ?? "none",
         }}
         submitLabel="Сохранить"
         cancelHref={contactHref}
