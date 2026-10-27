@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { contactFrequencies } from "@/db/schema";
+import { groupNameSchema } from "@/lib/group-schema";
 
 // "none" is the form's "Не задано"; it is stored as NULL.
 export const contactFrequencyValues = ["none", ...contactFrequencies] as const;
@@ -27,6 +28,10 @@ export const contactSchema = z.object({
     .string()
     .default("none")
     .pipe(z.enum(contactFrequencyValues, { error: "Выберите один из вариантов" })),
+  // Ticked existing groups, as sent: the server turns them into ids and skips what is not a group.
+  groupIds: z.array(z.string()).default([]),
+  // Names of groups to create when the contact is saved; a wrong name stops the whole save.
+  newGroups: z.array(groupNameSchema).default([]),
 });
 
 export const noteSchema = z.object({
@@ -42,6 +47,8 @@ export const emptyContactValues: ContactValues = {
   phone: "",
   email: "",
   contactFrequency: "none",
+  groupIds: [],
+  newGroups: [],
 };
 
 export type ContactFormState = {

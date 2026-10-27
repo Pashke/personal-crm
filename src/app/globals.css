@@ -76,7 +76,7 @@
    A row looks like the search example on the landing: initials, name, details. */
 @layer components {
   .contact-row {
-    @apply grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 px-3 py-2.5 transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:-outline-offset-2 md:grid-cols-[auto_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1fr)] md:gap-x-4 md:px-4 md:py-3.5;
+    @apply grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 px-3 py-2.5 transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:-outline-offset-2 md:grid-cols-[auto_minmax(0,1.2fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] md:gap-x-4 md:px-4 md:py-3.5;
   }
   .contact-row[data-added] {
     @apply bg-accent/15 hover:bg-accent/25;
@@ -94,11 +94,40 @@
   .contact-row > span:nth-child(2) {
     @apply text-name font-bold text-foreground;
   }
+  /* Groups of the contact, the fourth cell: a small line under the details on the phone, a column
+     on desktop. A contact without groups has an empty cell: it stays as a column on desktop, so the
+     columns line up, and takes no room on the phone. */
+  .contact-row > span:nth-child(4) {
+    @apply text-accent;
+  }
+  .contact-row > span:nth-child(4):empty {
+    @apply hidden md:block;
+  }
+  .contact-row:has(> span:nth-child(4):not(:empty)) > span:first-child {
+    @apply row-span-4 md:row-span-1;
+  }
   /* The part of the name that matches the search, as on the landing */
   .contact-row mark {
     @apply bg-transparent text-accent;
   }
   .contact-row > span:last-child {
     @apply md:text-right;
+  }
+
+  /* A toggle button: a bordered pill that fills with gold when it is on. Used by «Как часто общаться»
+     and «Группы» in the contact form (a label around a hidden checkbox or radio) and by the group
+     filter on the home page (a link marked with aria-current). */
+  .toggle {
+    @apply relative inline-flex min-h-11 cursor-pointer items-center rounded-sm border-[1.5px] border-accent px-3.5 font-display text-label font-medium whitespace-nowrap text-accent uppercase transition-colors select-none md:px-4;
+  }
+  .toggle:hover:not(:has(:checked), [aria-current]) {
+    @apply bg-muted/40;
+  }
+  .toggle:has(:checked),
+  .toggle[aria-current] {
+    @apply bg-accent text-accent-foreground;
+  }
+  .toggle:has(:focus-visible) {
+    @apply outline-2 outline-offset-2 outline-ring;
   }
 }

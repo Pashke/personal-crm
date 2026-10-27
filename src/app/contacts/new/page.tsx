@@ -4,10 +4,13 @@ import { createContact } from "@/app/actions";
 import { BackLink } from "@/components/back-link";
 import { ContactForm } from "@/components/contact-form";
 import { emptyContactValues } from "@/lib/contact-schema";
+import { listGroups } from "@/lib/groups";
 
 export const metadata: Metadata = { title: "Новый контакт" };
 
-export default function NewContactPage() {
+export default async function NewContactPage() {
+  const groups = await listGroups();
+
   return (
     <div className="flex flex-col gap-5 md:gap-6">
       <BackLink href="/">Все контакты</BackLink>
@@ -15,6 +18,7 @@ export default function NewContactPage() {
       <ContactForm
         action={createContact}
         initialValues={emptyContactValues}
+        groups={groups}
         submitLabel="Добавить"
         cancelHref="/"
       />

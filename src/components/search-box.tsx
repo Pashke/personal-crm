@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useTransition } from "react";
 
 import { Input } from "@/components/ui/input";
+import { homeHref } from "@/lib/home-href";
 
 const DEBOUNCE_MS = 250;
 
 // Live search: the query goes into the URL (?q=...), the server filters the list.
-export function SearchBox({ initialQuery }: { initialQuery: string }) {
+// The selected group (?group=...) is kept, so typing and clearing never drop it.
+export function SearchBox({ initialQuery, groupId }: { initialQuery: string; groupId: number | null }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -32,7 +34,7 @@ export function SearchBox({ initialQuery }: { initialQuery: string }) {
     if (query === lastSentRef.current) return;
     lastSentRef.current = query;
     startTransition(() => {
-      router.replace(query ? `/?q=${encodeURIComponent(query)}` : "/", { scroll: false });
+      router.replace(homeHref({ q: query, groupId }), { scroll: false });
     });
   }
 

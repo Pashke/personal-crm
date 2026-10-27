@@ -1,11 +1,11 @@
 import "server-only";
 
-import { and, asc, count, desc, eq, getTableColumns, ilike, isNotNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, getTableColumns, ilike, isNotNull, sql, type SQL } from "drizzle-orm";
 import { connection } from "next/server";
 import { cache } from "react";
 
 import { getDb } from "@/db";
-import { contacts, notes, type ContactFrequency } from "@/db/schema";
+import { contactGroups, contacts, notes, type ContactFrequency } from "@/db/schema";
 import { describeError } from "@/lib/describe-error";
 
 // Every read waits for a request: contacts change at runtime, so pages must never be
@@ -31,7 +31,29 @@ const dueAt = asTimestamp(sql`(
   end
 )`);
 
-export async function listContacts(query: string) {
+// Narrows a contacts query to the members of one group; nothing to narrow without a group.
+function inGroup(groupId: number | null | undefined) {
+  if (!groupId) return undefined;
+  return exists(
+    getDb()
+      .select({ one: sql`1` })
+      .from(contactGroups)
+      .where(and(eq(contactGroups.contactId, contacts.id), eq(contactGroups.groupId, groupId))),
+  );
+}
+
+// The names of the groups a contact is in, in the common order (by group id); empty without groups.
+// Written with plain names: inside a single-table query Drizzle drops table prefixes from columns,
+// which would make the inner "id" refer to the wrong table.
+const groupNames = sql<string[]>`coalesce((
+  select array_agg(g.name order by g.id)
+  from contact_groups cg
+  join groups g on g.id = cg.group_id
+  where cg.contact_id = "contacts"."id"
+), '{}')`;
+
+// The list for the home page: every contact, or the members of one group; `query` narrows it by name.
+export async function listContacts(query: string, groupId?: number | null) {
   await connection();
 
   // Every word must appear in the name: "ив пет" finds "Иван Петров".
@@ -39,6 +61,7 @@ export async function listContacts(query: string) {
   const filter = words.length
     ? and(...words.map((word) => ilike(contacts.name, `%${escapeLike(word)}%`)))
     : undefined;
+  const where = and(filter, inGroup(groupId));
 
   try {
     return await getDb()
@@ -48,9 +71,10 @@ export async function listContacts(query: string) {
         howMet: contacts.howMet,
         phone: contacts.phone,
         email: contacts.email,
+        groups: groupNames,
       })
       .from(contacts)
-      .where(filter)
+      .where(where)
       .orderBy(sql`${contacts.name} collate "ru-x-icu"`, asc(contacts.id));
   } catch (error) {
     // The original error carries the search words, usually someone's name, and Next.js
@@ -68,7 +92,8 @@ export async function countContacts() {
 
 // Contacts it is time to get in touch with: a frequency is set and the due date has come.
 // The most overdue come first; the page decides how many of them to show.
-export async function listDueContacts() {
+// With a group selected, only the members of that group.
+export async function listDueContacts(groupId?: number | null) {
   await connection();
   return getDb()
     .select({
@@ -81,10 +106,15 @@ export async function listDueContacts() {
     })
     .from(contacts)
     .leftJoin(notes, eq(notes.contactId, contacts.id))
-    .where(isNotNull(contacts.contactFrequency))
+    .where(and(isNotNull(contacts.contactFrequency), inGroup(groupId)))
     .groupBy(contacts.id)
     .having(sql`${dueAt} <= now()`)
     .orderBy(dueAt, sql`${contacts.name} collate "ru-x-icu"`, asc(contacts.id));
+}
+
+// «Пора связаться» as the home page shows it: hidden while a search is typed, so not even queried then.
+export async function listDueContactsForHome(query: string, groupId: number | null) {
+  return query ? [] : listDueContacts(groupId);
 }
 
 // Wrapped in cache() so the page and its metadata share one query per request.
@@ -107,12 +137,6 @@ export async function listNotes(contactId: number) {
     .from(notes)
     .where(eq(notes.contactId, contactId))
     .orderBy(desc(notes.createdAt), desc(notes.id));
-}
-
-export function parseContactId(raw: string): number | null {
-  if (!/^\d{1,9}$/.test(raw)) return null;
-  const id = Number(raw);
-  return id > 0 ? id : null;
 }
 
 function escapeLike(value: string) {

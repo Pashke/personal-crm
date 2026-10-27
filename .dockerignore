@@ -16,6 +16,8 @@ next-env.d.ts
 .github
 .claude
 deploy
+tests
+vitest.config.mts
 specs
 *.md
 Dockerfile

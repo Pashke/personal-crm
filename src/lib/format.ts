@@ -13,7 +13,51 @@ export function formatCount(count: number) {
   return count.toLocaleString("ru-RU");
 }
 
-const dateTimeFormat = new Intl.DateTimeFormat("ru-RU", {
+// How many contacts a group has: "3 контакта", or "нет контактов" for an empty group.
+export function formatGroupContactCount(count: number) {
+  if (count === 0) return "нет контактов";
+  return `${formatCount(count)} ${pluralize(count, ["контакт", "контакта", "контактов"])}`;
+}
+
+// The line under the title of the home page: the total, or «Найдено N из M» while a group is
+// selected or a search is running (M is every contact).
+export function formatContactsSummary({
+  found,
+  total,
+  filtered,
+}: {
+  found: number;
+  total: number;
+  filtered: boolean;
+}) {
+  if (filtered) return `Найдено ${formatCount(found)} из ${formatCount(total)}`;
+  return `${formatCount(total)} ${pluralize(total, ["контакт", "контакта", "контактов"])}`;
+}
+
+// What the list says when it is empty because of the selected group or the search;
+// null when there are simply no contacts (the page then invites to add the first one).
+export function emptyListText({ query, groupName }: { query: string; groupName: string | null }) {
+  if (query) {
+    return groupName === null
+      ? `Никого не нашлось по запросу «${query}»`
+      : `Никого не нашлось по запросу «${query}» в группе «${groupName}»`;
+  }
+  return groupName === null ? null : `В группе «${groupName}» пока никого нет`;
+}
+
+// Group names in one line: "Друзья, Теннис".
+export function formatGroupNames(names: string[]) {
+  return names.join(", ");
+}
+
+// The text of the confirmation window before a group is deleted.
+export function groupDeleteDescription(name: string, contactCount: number) {
+  return contactCount > 0
+    ? `Группа «${name}» будет удалена. Контакты из неё останутся — просто выйдут из группы.`
+    : `Группа «${name}» будет удалена. Контактов в ней нет.`;
+}
+
+const dateTimeFormat =new Intl.DateTimeFormat("ru-RU", {
   day: "numeric",
   month: "long",
   year: "numeric",

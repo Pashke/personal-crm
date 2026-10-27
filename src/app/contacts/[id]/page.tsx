@@ -1,19 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Fragment } from "react";
 
 import { addNote, deleteContact } from "@/app/actions";
 import { BackLink } from "@/components/back-link";
 import { DeleteContactButton } from "@/components/delete-contact-button";
 import { NoteForm } from "@/components/note-form";
 import { Button } from "@/components/ui/button";
-import { getContact, listNotes, parseContactId } from "@/lib/contacts";
+import { getContact, listNotes } from "@/lib/contacts";
 import { formatDateTime, formatDueStatus, frequencyLabels } from "@/lib/format";
+import { listContactGroups } from "@/lib/groups";
+import { homeHref } from "@/lib/home-href";
+import { parseId } from "@/lib/ids";
 
 export async function generateMetadata({
   params,
 }: PageProps<"/contacts/[id]">): Promise<Metadata> {
-  const id = parseContactId((await params).id);
+  const id = parseId((await params).id);
   const contact = id ? await getContact(id) : null;
   return { title: contact?.name ?? "Контакт не найден" };
 }
@@ -22,10 +26,14 @@ const linkClass =
   "underline decoration-border underline-offset-4 transition-colors hover:decoration-accent";
 
 export default async function ContactPage({ params }: PageProps<"/contacts/[id]">) {
-  const id = parseContactId((await params).id);
+  const id = parseId((await params).id);
   if (!id) notFound();
 
-  const [contact, contactNotes] = await Promise.all([getContact(id), listNotes(id)]);
+  const [contact, contactNotes, contactGroups] = await Promise.all([
+    getContact(id),
+    listNotes(id),
+    listContactGroups(id),
+  ]);
   if (!contact) notFound();
 
   // The due date is read from the database on every request, so "now" is this request's moment.
@@ -55,6 +63,17 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
 
         <dl className="border-t-2 border-accent">
           <Detail label="Откуда знакомы">{contact.howMet}</Detail>
+          <Detail label="Группы">
+            {contactGroups.length > 0 &&
+              contactGroups.map((group, index) => (
+                <Fragment key={group.id}>
+                  {index > 0 && ", "}
+                  <Link href={homeHref({ groupId: group.id })} className={linkClass}>
+                    {group.name}
+                  </Link>
+                </Fragment>
+              ))}
+          </Detail>
           <Detail label="Телефон">
             {contact.phone && (
               <a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`} className={linkClass}>

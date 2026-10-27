@@ -1,4 +1,4 @@
-// Fills an empty database with realistic test contacts and notes.
+// Fills an empty database with realistic test contacts, notes and group memberships.
 // Usage: pnpm db:seed (refuses to run if contacts already exist, so real data is never mixed with test data).
 import { fakerRU as faker } from "@faker-js/faker";
 import { loadEnvConfig } from "@next/env";
@@ -7,7 +7,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import { getDatabaseConfig } from "../src/db/config";
-import { contacts, notes, type ContactFrequency } from "../src/db/schema";
+import { contactGroups, contacts, groups, notes, type ContactFrequency } from "../src/db/schema";
 
 const CONTACT_COUNT = 1000;
 
@@ -175,6 +175,23 @@ function makeFrequency(): ContactFrequency | null {
   ]);
 }
 
+// About a third of contacts are in no group, the rest in one or two. Relatives always go to «Семья»
+// and the tennis coach to «Теннис» (when those groups exist). Without any groups, nobody is in one.
+function pickGroupIds(howMet: string | null, all: { id: number; name: string }[]): number[] {
+  if (all.length === 0) return [];
+
+  const idOf = (name: string) => all.find((group) => group.name === name)?.id;
+  const fixed = new Set<number>();
+  if (howMet?.startsWith("Двоюродн")) fixed.add(idOf("Семья") ?? 0);
+  if (howMet === "Тренер по теннису") fixed.add(idOf("Теннис") ?? 0);
+  fixed.delete(0);
+  if (fixed.size > 0) return [...fixed];
+
+  if (faker.datatype.boolean({ probability: 1 / 3 })) return [];
+  const count = faker.number.int({ min: 1, max: Math.min(2, all.length) });
+  return faker.helpers.arrayElements(all, count).map((group) => group.id);
+}
+
 function makePhone() {
   const digits = (n: number) => faker.string.numeric(n);
   return `+7 9${digits(2)} ${digits(3)}-${digits(2)}-${digits(2)}`;
@@ -237,7 +254,17 @@ async function main() {
       });
 
       if (noteRows.length > 0) await tx.insert(notes).values(noteRows);
-      console.log(`Seeded ${inserted.length} contacts and ${noteRows.length} notes.`);
+
+      // After the notes, so contacts and notes come out the same as before groups existed.
+      const allGroups = await tx.select({ id: groups.id, name: groups.name }).from(groups).orderBy(groups.id);
+      const memberships = inserted.flatMap(({ id }, index) =>
+        pickGroupIds(people[index].row.howMet, allGroups).map((groupId) => ({ contactId: id, groupId })),
+      );
+      if (memberships.length > 0) await tx.insert(contactGroups).values(memberships);
+
+      console.log(
+        `Seeded ${inserted.length} contacts, ${noteRows.length} notes and ${memberships.length} group memberships.`,
+      );
     });
   } finally {
     await pool.end();
