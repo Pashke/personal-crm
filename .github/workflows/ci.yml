@@ -1,0 +1,100 @@
+# Runs on every pull request into main: lint, format, types, Vitest, Playwright, image build.
+# The job names below are the required checks of the main branch protection: rename them together.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+# A new push to the same PR makes the previous run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: Lint, format, types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm version comes from the "packageManager" field of package.json
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          # Same Node as in the Dockerfile
+          node-version: 24.22.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm format:check
+
+      - run: pnpm typecheck
+
+  tests:
+    name: Vitest and Playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      POSTGRES_USER: crm
+      POSTGRES_DB: crm
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Real Postgres from the same docker-compose.yml as on a developer machine. The password is
+      # random for each run, masked in the log and never stored anywhere.
+      - name: Start Postgres
+        run: |
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
+          POSTGRES_PASSWORD="$password" docker compose up -d --wait postgres
+
+      - run: pnpm test
+
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm test:e2e
+
+      # Traces of failed e2e tests: open with `pnpm exec playwright show-trace`
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  image:
+    name: Build image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Only checks that the production image builds: it is built and pushed after merge (see deploy.yml)
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

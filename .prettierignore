@@ -1,0 +1,18 @@
+# Generated or not ours: no point in formatting
+.next
+node_modules
+pnpm-lock.yaml
+drizzle
+next-env.d.ts
+public
+test-results
+playwright-report
+.vitest
+# Specs, agent commands/skills and docs are prose, not app code
+openspec
+specs
+.claude
+*.md
+*.html
+# Server scripts and configs are rolled out by the deploy, not formatted here
+deploy

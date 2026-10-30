@@ -19,11 +19,10 @@ import {
   type UndoContactLogResult,
 } from "@/lib/contact-schema";
 import { describeError, isForeignKeyViolation } from "@/lib/describe-error";
+import { isValidId, parseId } from "@/lib/ids";
+import { setContactGroups } from "@/lib/groups";
 
-export async function createContact(
-  _prevState: ContactFormState,
-  formData: FormData,
-): Promise<ContactFormState> {
+export async function createContact(_prevState: ContactFormState, formData: FormData): Promise<ContactFormState> {
   const values = readContactValues(formData);
   const parsed = contactSchema.safeParse(values);
   if (!parsed.success) {
@@ -32,11 +31,12 @@ export async function createContact(
 
   let id: number;
   try {
-    const [row] = await getDb()
-      .insert(contacts)
-      .values(toContactRow(parsed.data))
-      .returning({ id: contacts.id });
-    id = row.id;
+    // The contact and its groups are saved together: either both, or nothing.
+    id = await getDb().transaction(async (tx) => {
+      const [row] = await tx.insert(contacts).values(toContactRow(parsed.data)).returning({ id: contacts.id });
+      await setContactGroups(tx, row.id, toGroupIds(parsed.data.groupIds), parsed.data.newGroups);
+      return row.id;
+    });
   } catch (error) {
     console.error("Failed to create contact", { error: describeError(error) });
     return { values, message: "Не удалось сохранить контакт. Попробуйте ещё раз." };
@@ -61,12 +61,17 @@ export async function updateContact(
   }
 
   try {
-    const updated = await getDb()
-      .update(contacts)
-      .set({ ...toContactRow(parsed.data), updatedAt: new Date() })
-      .where(eq(contacts.id, id))
-      .returning({ id: contacts.id });
-    if (updated.length === 0) {
+    const found = await getDb().transaction(async (tx) => {
+      const updated = await tx
+        .update(contacts)
+        .set({ ...toContactRow(parsed.data), updatedAt: new Date() })
+        .where(eq(contacts.id, id))
+        .returning({ id: contacts.id });
+      if (updated.length === 0) return false;
+      await setContactGroups(tx, id, toGroupIds(parsed.data.groupIds), parsed.data.newGroups);
+      return true;
+    });
+    if (!found) {
       return { values, message: "Контакт не найден — возможно, его удалили." };
     }
   } catch (error) {
@@ -149,10 +154,7 @@ export async function logContact(contactId: number, body: string): Promise<LogCo
 
   let noteId: number;
   try {
-    const [row] = await getDb()
-      .insert(notes)
-      .values({ contactId, body: parsed.data.body })
-      .returning({ id: notes.id });
+    const [row] = await getDb().insert(notes).values({ contactId, body: parsed.data.body }).returning({ id: notes.id });
     noteId = row.id;
   } catch (error) {
     if (isForeignKeyViolation(error)) {
@@ -182,12 +184,7 @@ export async function undoContactLog(noteId: number): Promise<UndoContactLogResu
   try {
     deleted = await getDb()
       .delete(notes)
-      .where(
-        and(
-          eq(notes.id, noteId),
-          gt(notes.createdAt, sql`now() - make_interval(secs => ${UNDO_WINDOW_SECONDS})`),
-        ),
-      )
+      .where(and(eq(notes.id, noteId), gt(notes.createdAt, sql`now() - make_interval(secs => ${UNDO_WINDOW_SECONDS})`)))
       .returning({ contactId: notes.contactId });
   } catch (error) {
     console.error("Failed to undo contact log", { noteId, error: describeError(error) });
@@ -212,7 +209,16 @@ function readContactValues(formData: FormData): ContactValues {
     email: read("email"),
     // No choice sent at all means "not set"; any other value is checked by the schema.
     contactFrequency: frequency === null ? undefined : String(frequency),
+    groupIds: formData.getAll("groupIds").map(String),
+    newGroups: formData.getAll("newGroups").map(String),
   };
+}
+
+// Ticked groups arrive as text from the browser: what is not an id is dropped, repeats merge.
+// Whether a group with that id exists is decided when the groups are written.
+function toGroupIds(raw: string[]) {
+  const ids = raw.map(parseId).filter((id): id is number => id !== null);
+  return [...new Set(ids)];
 }
 
 // Empty optional fields are stored as NULL rather than empty strings, and so is "Не задано".
@@ -233,9 +239,4 @@ function firstErrors(error: z.ZodError<ContactValues>) {
     if (messages?.[0]) result[field as ContactField] = messages[0];
   }
   return result;
-}
-
-// Bound arguments come back from the browser, so they are checked like any other input.
-function isValidId(id: unknown): id is number {
-  return typeof id === "number" && Number.isInteger(id) && id > 0;
 }

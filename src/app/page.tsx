@@ -5,26 +5,34 @@ import { DeletedContactNotice } from "@/components/deleted-contact-notice";
 import { DueContacts, type DueContactRow } from "@/components/due-contacts";
 import { SearchBox } from "@/components/search-box";
 import { Button } from "@/components/ui/button";
-import { countContacts, listContacts, listDueContacts } from "@/lib/contacts";
+import { countContacts, listContacts, listDueContactsForHome } from "@/lib/contacts";
 import {
-  formatCount,
+  emptyListText,
+  formatContactsSummary,
+  formatGroupNames,
   formatLastContact,
   frequencyLabelInline,
   initials,
-  pluralize,
   splitMatches,
 } from "@/lib/format";
+import { listGroups } from "@/lib/groups";
+import { homeHref } from "@/lib/home-href";
+import { resolveSelectedGroup } from "@/lib/selected-group";
 
 export default async function ContactsPage({ searchParams }: PageProps<"/">) {
-  const { q, added, deleted } = await searchParams;
+  const { q, group, added, deleted } = await searchParams;
   const query = typeof q === "string" ? q.trim() : "";
   const addedId = typeof added === "string" ? Number(added) : null;
 
-  // «Пора связаться» is hidden during a search, so it is not even queried then.
+  // The groups come first: ?group= is checked against them (a deleted or made-up group means «Все»).
+  const groups = await listGroups();
+  const groupId = resolveSelectedGroup(group, groups);
+  const selectedGroup = groups.find((item) => item.id === groupId) ?? null;
+
   const [items, total, due] = await Promise.all([
-    listContacts(query),
+    listContacts(query, groupId),
     countContacts(),
-    query ? [] : listDueContacts(),
+    listDueContactsForHome(query, groupId),
   ]);
   const addedContact = addedId ? items.find((item) => item.id === addedId) : undefined;
 
@@ -44,9 +52,11 @@ export default async function ContactsPage({ searchParams }: PageProps<"/">) {
         <div className="flex flex-col gap-1.5">
           <h1 className="font-display text-title font-bold uppercase">Контакты</h1>
           <p className="text-meta text-muted-foreground">
-            {query
-              ? `Найдено ${formatCount(items.length)} из ${formatCount(total)}`
-              : `${formatCount(total)} ${pluralize(total, ["контакт", "контакта", "контактов"])}`}
+            {formatContactsSummary({
+              found: items.length,
+              total,
+              filtered: query !== "" || selectedGroup !== null,
+            })}
           </p>
         </div>
         <Button asChild size="lg" className="w-full sm:w-auto">
@@ -54,12 +64,36 @@ export default async function ContactsPage({ searchParams }: PageProps<"/">) {
         </Button>
       </div>
 
+      {groups.length > 0 && (
+        <nav aria-label="Группы" className="flex flex-wrap gap-2">
+          <Link
+            href={homeHref({ q: query })}
+            scroll={false}
+            className="toggle"
+            aria-current={selectedGroup === null ? "true" : undefined}
+          >
+            Все
+          </Link>
+          {groups.map((item) => (
+            <Link
+              key={item.id}
+              href={homeHref({ q: query, groupId: item.id })}
+              scroll={false}
+              className="toggle"
+              aria-current={item.id === groupId ? "true" : undefined}
+            >
+              {item.name}
+            </Link>
+          ))}
+        </nav>
+      )}
+
       {dueRows.length > 0 && <DueContacts rows={dueRows} />}
 
-      <SearchBox initialQuery={query} />
+      <SearchBox initialQuery={query} groupId={groupId} />
 
       {items.length === 0 ? (
-        <EmptyState query={query} />
+        <EmptyState text={emptyListText({ query, groupName: selectedGroup?.name ?? null })} />
       ) : (
         <ul className="divide-y rounded-sm border">
           {items.map((contact) => (
@@ -79,6 +113,7 @@ export default async function ContactsPage({ searchParams }: PageProps<"/">) {
                     : contact.name}
                 </span>
                 <span>{contact.howMet}</span>
+                <span>{formatGroupNames(contact.groups)}</span>
                 <span>{contact.phone ?? contact.email}</span>
               </Link>
             </li>
@@ -92,11 +127,11 @@ export default async function ContactsPage({ searchParams }: PageProps<"/">) {
   );
 }
 
-function EmptyState({ query }: { query: string }) {
+function EmptyState({ text }: { text: string | null }) {
   return (
     <div className="rounded-sm border border-dashed px-4 py-12 text-center text-muted-foreground">
-      {query ? (
-        <p>Никого не нашлось по запросу «{query}»</p>
+      {text ? (
+        <p>{text}</p>
       ) : (
         <p>
           Пока нет ни одного контакта.{" "}

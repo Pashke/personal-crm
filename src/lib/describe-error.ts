@@ -22,11 +22,20 @@ export function describeError(error: unknown) {
 }
 
 // SQLSTATE 23503 foreign_key_violation, e.g. a note for a contact deleted in another tab.
-// Drizzle puts the driver error on `cause`, so the whole chain is checked.
 export function isForeignKeyViolation(error: unknown) {
+  return hasSqlState(error, "23503");
+}
+
+// SQLSTATE 23505 unique_violation, e.g. a group whose name is already taken.
+export function isUniqueViolation(error: unknown) {
+  return hasSqlState(error, "23505");
+}
+
+// Drizzle puts the driver error on `cause`, so the whole chain is checked.
+function hasSqlState(error: unknown, state: string) {
   let current = error;
   for (let depth = 0; current instanceof Error && depth < MAX_DEPTH; depth++) {
-    if (Reflect.get(current, "code") === "23503") return true;
+    if (Reflect.get(current, "code") === state) return true;
     current = current.cause;
   }
   return false;

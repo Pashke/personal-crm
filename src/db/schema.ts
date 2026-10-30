@@ -1,4 +1,5 @@
-import { index, integer, pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { index, integer, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 // How often the user wants to be in touch with a contact. NULL in the column means "not set".
 // The list lives here so the form, validation and labels all take it from one place.
@@ -29,6 +30,35 @@ export const notes = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("notes_contact_id_idx").on(table.contactId)],
+);
+
+// Contact groups. The order of groups everywhere is the order of creation, i.e. by id.
+// The unique index on lower(name) makes "теннис" and "Теннис" one group, even for two simultaneous requests.
+export const groups = pgTable(
+  "groups",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    name: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("groups_name_lower_idx").on(sql`lower(${table.name})`)],
+);
+
+// Who is in which group. A row disappears together with its contact or its group.
+export const contactGroups = pgTable(
+  "contact_groups",
+  {
+    contactId: integer("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.contactId, table.groupId] }),
+    index("contact_groups_group_id_idx").on(table.groupId),
+  ],
 );
 
 export type Contact = typeof contacts.$inferSelect;

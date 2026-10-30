@@ -1,4 +1,4 @@
-// Fills an empty database with realistic test contacts and notes.
+// Fills an empty database with realistic test contacts, notes and group memberships.
 // Usage: pnpm db:seed (refuses to run if contacts already exist, so real data is never mixed with test data).
 import { fakerRU as faker } from "@faker-js/faker";
 import { loadEnvConfig } from "@next/env";
@@ -7,7 +7,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import { getDatabaseConfig } from "../src/db/config";
-import { contacts, notes, type ContactFrequency } from "../src/db/schema";
+import { contactGroups, contacts, groups, notes, type ContactFrequency } from "../src/db/schema";
 
 const CONTACT_COUNT = 1000;
 
@@ -19,18 +19,90 @@ const g = (sex: Sex, male: string, female: string) => (sex === "male" ? male : f
 // Common modern first names: faker's Russian locale includes many archaic ones (Ярополк, Фёкла).
 const firstNames: Record<Sex, string[]> = {
   male: [
-    "Александр", "Алексей", "Андрей", "Антон", "Артём", "Борис", "Вадим", "Василий", "Виктор",
-    "Виталий", "Владимир", "Владислав", "Вячеслав", "Глеб", "Григорий", "Денис", "Дмитрий",
-    "Евгений", "Егор", "Иван", "Игорь", "Илья", "Кирилл", "Константин", "Леонид", "Максим",
-    "Марк", "Матвей", "Михаил", "Никита", "Николай", "Олег", "Павел", "Пётр", "Роман",
-    "Руслан", "Сергей", "Станислав", "Степан", "Тимур", "Фёдор", "Юрий", "Ярослав",
+    "Александр",
+    "Алексей",
+    "Андрей",
+    "Антон",
+    "Артём",
+    "Борис",
+    "Вадим",
+    "Василий",
+    "Виктор",
+    "Виталий",
+    "Владимир",
+    "Владислав",
+    "Вячеслав",
+    "Глеб",
+    "Григорий",
+    "Денис",
+    "Дмитрий",
+    "Евгений",
+    "Егор",
+    "Иван",
+    "Игорь",
+    "Илья",
+    "Кирилл",
+    "Константин",
+    "Леонид",
+    "Максим",
+    "Марк",
+    "Матвей",
+    "Михаил",
+    "Никита",
+    "Николай",
+    "Олег",
+    "Павел",
+    "Пётр",
+    "Роман",
+    "Руслан",
+    "Сергей",
+    "Станислав",
+    "Степан",
+    "Тимур",
+    "Фёдор",
+    "Юрий",
+    "Ярослав",
   ],
   female: [
-    "Алёна", "Алина", "Алиса", "Анастасия", "Анна", "Арина", "Валентина", "Валерия", "Вера",
-    "Вероника", "Виктория", "Галина", "Дарья", "Диана", "Екатерина", "Елена", "Елизавета",
-    "Жанна", "Ирина", "Карина", "Кристина", "Ксения", "Лариса", "Любовь", "Людмила",
-    "Маргарита", "Марина", "Мария", "Надежда", "Наталья", "Нина", "Ольга", "Полина",
-    "Светлана", "София", "Татьяна", "Ульяна", "Юлия", "Яна",
+    "Алёна",
+    "Алина",
+    "Алиса",
+    "Анастасия",
+    "Анна",
+    "Арина",
+    "Валентина",
+    "Валерия",
+    "Вера",
+    "Вероника",
+    "Виктория",
+    "Галина",
+    "Дарья",
+    "Диана",
+    "Екатерина",
+    "Елена",
+    "Елизавета",
+    "Жанна",
+    "Ирина",
+    "Карина",
+    "Кристина",
+    "Ксения",
+    "Лариса",
+    "Любовь",
+    "Людмила",
+    "Маргарита",
+    "Марина",
+    "Мария",
+    "Надежда",
+    "Наталья",
+    "Нина",
+    "Ольга",
+    "Полина",
+    "Светлана",
+    "София",
+    "Татьяна",
+    "Ульяна",
+    "Юлия",
+    "Яна",
   ],
 };
 
@@ -119,8 +191,7 @@ const agreements = [
 const noteTemplates: ((sex: Sex) => string)[] = [
   () =>
     `Созвонились, обсудили ${faker.helpers.arrayElement(topics)}. Договорились${faker.helpers.arrayElement(agreements)}.`,
-  (s) =>
-    `Встретились на кофе. ${g(s, "Рассказывал", "Рассказывала")} про ${faker.helpers.arrayElement(topics)}.`,
+  (s) => `Встретились на кофе. ${g(s, "Рассказывал", "Рассказывала")} про ${faker.helpers.arrayElement(topics)}.`,
   (s) => `Созвонились в день рождения, ${g(s, "был очень рад", "была очень рада")}.`,
   (s) =>
     `${g(s, "Написал", "Написала")} сам${g(s, "", "а")}, спрашивал${g(s, "", "а")} совета про ${faker.helpers.arrayElement(topics)}.`,
@@ -130,14 +201,43 @@ const noteTemplates: ((sex: Sex) => string)[] = [
   () => "Случайно встретились в торговом центре, поболтали минут десять.",
   (s) =>
     `${g(s, "Сменил", "Сменила")} работу, теперь в небольшой продуктовой компании. ${g(s, "Доволен", "Довольна")}.`,
-  () =>
-    `Обсудили ${faker.helpers.arrayElement(topics)}.\nИтог: договорились${faker.helpers.arrayElement(agreements)}.`,
+  () => `Обсудили ${faker.helpers.arrayElement(topics)}.\nИтог: договорились${faker.helpers.arrayElement(agreements)}.`,
 ];
 
 const translit: Record<string, string> = {
-  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
-  к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
-  х: "kh", ц: "ts", ч: "ch", ш: "sh", щ: "shch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+  а: "a",
+  б: "b",
+  в: "v",
+  г: "g",
+  д: "d",
+  е: "e",
+  ё: "e",
+  ж: "zh",
+  з: "z",
+  и: "i",
+  й: "y",
+  к: "k",
+  л: "l",
+  м: "m",
+  н: "n",
+  о: "o",
+  п: "p",
+  р: "r",
+  с: "s",
+  т: "t",
+  у: "u",
+  ф: "f",
+  х: "kh",
+  ц: "ts",
+  ч: "ch",
+  ш: "sh",
+  щ: "shch",
+  ъ: "",
+  ы: "y",
+  ь: "",
+  э: "e",
+  ю: "yu",
+  я: "ya",
 };
 
 function toLatin(value: string) {
@@ -175,6 +275,23 @@ function makeFrequency(): ContactFrequency | null {
   ]);
 }
 
+// About a third of contacts are in no group, the rest in one or two. Relatives always go to «Семья»
+// and the tennis coach to «Теннис» (when those groups exist). Without any groups, nobody is in one.
+function pickGroupIds(howMet: string | null, all: { id: number; name: string }[]): number[] {
+  if (all.length === 0) return [];
+
+  const idOf = (name: string) => all.find((group) => group.name === name)?.id;
+  const fixed = new Set<number>();
+  if (howMet?.startsWith("Двоюродн")) fixed.add(idOf("Семья") ?? 0);
+  if (howMet === "Тренер по теннису") fixed.add(idOf("Теннис") ?? 0);
+  fixed.delete(0);
+  if (fixed.size > 0) return [...fixed];
+
+  if (faker.datatype.boolean({ probability: 1 / 3 })) return [];
+  const count = faker.number.int({ min: 1, max: Math.min(2, all.length) });
+  return faker.helpers.arrayElements(all, count).map((group) => group.id);
+}
+
 function makePhone() {
   const digits = (n: number) => faker.string.numeric(n);
   return `+7 9${digits(2)} ${digits(3)}-${digits(2)}-${digits(2)}`;
@@ -210,9 +327,7 @@ async function main() {
             ? faker.helpers.arrayElement(howMetTemplates)(sex)
             : null,
           phone: faker.datatype.boolean({ probability: 0.85 }) ? makePhone() : null,
-          email: faker.datatype.boolean({ probability: 0.7 })
-            ? makeEmail(firstName, lastName, usedEmails)
-            : null,
+          email: faker.datatype.boolean({ probability: 0.7 }) ? makeEmail(firstName, lastName, usedEmails) : null,
           contactFrequency: makeFrequency(),
           createdAt,
           updatedAt: createdAt,
@@ -237,7 +352,17 @@ async function main() {
       });
 
       if (noteRows.length > 0) await tx.insert(notes).values(noteRows);
-      console.log(`Seeded ${inserted.length} contacts and ${noteRows.length} notes.`);
+
+      // After the notes, so contacts and notes come out the same as before groups existed.
+      const allGroups = await tx.select({ id: groups.id, name: groups.name }).from(groups).orderBy(groups.id);
+      const memberships = inserted.flatMap(({ id }, index) =>
+        pickGroupIds(people[index].row.howMet, allGroups).map((groupId) => ({ contactId: id, groupId })),
+      );
+      if (memberships.length > 0) await tx.insert(contactGroups).values(memberships);
+
+      console.log(
+        `Seeded ${inserted.length} contacts, ${noteRows.length} notes and ${memberships.length} group memberships.`,
+      );
     });
   } finally {
     await pool.end();

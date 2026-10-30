@@ -1,22 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type {
-  ContactField,
-  ContactFormState,
-  ContactFrequencyValue,
-  ContactValues,
-} from "@/lib/contact-schema";
+import type { ContactField, ContactFormState, ContactFrequencyValue, ContactValues } from "@/lib/contact-schema";
 import { frequencyLabels } from "@/lib/format";
+import { addPendingGroup } from "@/lib/pending-group";
+
+type GroupOption = { id: number; name: string };
 
 type ContactFormProps = {
   action: (state: ContactFormState, formData: FormData) => Promise<ContactFormState>;
   initialValues: ContactValues;
+  // Every existing group, in the common order.
+  groups: GroupOption[];
   submitLabel: string;
   cancelHref: string;
 };
@@ -30,7 +30,7 @@ const frequencyOptions: { value: ContactFrequencyValue; label: string }[] = [
 ];
 
 const fields: {
-  name: Exclude<ContactField, "contactFrequency">;
+  name: Exclude<ContactField, "contactFrequency" | "groupIds" | "newGroups">;
   label: string;
   type: "text" | "tel" | "email";
   placeholder: string;
@@ -47,7 +47,7 @@ const fields: {
   { name: "email", label: "Почта", type: "email", placeholder: "ivan@example.com" },
 ];
 
-export function ContactForm({ action, initialValues, submitLabel, cancelHref }: ContactFormProps) {
+export function ContactForm({ action, initialValues, groups, submitLabel, cancelHref }: ContactFormProps) {
   const [state, formAction, pending] = useActionState(action, { values: initialValues });
 
   return (
@@ -84,6 +84,13 @@ export function ContactForm({ action, initialValues, submitLabel, cancelHref }: 
 
       <FrequencyField selected={state.values.contactFrequency} error={state.errors?.contactFrequency} />
 
+      <GroupsField
+        groups={groups}
+        checkedIds={state.values.groupIds ?? []}
+        initialPending={state.values.newGroups ?? []}
+        error={state.errors?.newGroups}
+      />
+
       {state.message && (
         <p role="alert" className="rounded-sm border border-destructive px-3.5 py-2.5 text-meta text-destructive">
           {state.message}
@@ -109,15 +116,10 @@ function FrequencyField({ selected = "none", error }: { selected?: string; error
   const errorId = "contactFrequency-error";
   return (
     <fieldset className="flex min-w-0 flex-col gap-2" aria-describedby={error ? errorId : undefined}>
-      <legend className="mb-2.5 font-display text-label font-medium text-accent uppercase">
-        Как часто общаться
-      </legend>
+      <legend className="mb-2.5 font-display text-label font-medium text-accent uppercase">Как часто общаться</legend>
       <div className="flex flex-wrap gap-2">
         {frequencyOptions.map((option) => (
-          <label
-            key={option.value}
-            className="relative inline-flex min-h-11 cursor-pointer items-center rounded-sm border-[1.5px] border-accent px-3.5 font-display text-label font-medium whitespace-nowrap text-accent uppercase transition-colors select-none not-has-checked:hover:bg-muted/40 has-checked:bg-accent has-checked:text-accent-foreground has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring md:px-4"
-          >
+          <label key={option.value} className="toggle">
             <input
               type="radio"
               name="contactFrequency"
@@ -132,6 +134,116 @@ function FrequencyField({ selected = "none", error }: { selected?: string; error
       {error && (
         <p id={errorId} className="text-meta text-destructive">
           {error}
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
+// «Группы»: every group is a toggle. Plain checkboxes, like the radio buttons above, go back to
+// `defaultChecked` on their own when the form is reset after a failed save, so ticks survive an
+// error in another field. A new group typed here is only remembered until the contact is saved:
+// the server creates it then, so «Отмена» leaves no trace.
+function GroupsField({
+  groups,
+  checkedIds,
+  initialPending,
+  error,
+}: {
+  groups: GroupOption[];
+  checkedIds: string[];
+  initialPending: string[];
+  error?: string;
+}) {
+  const [pending, setPending] = useState(initialPending);
+  const [typed, setTyped] = useState("");
+  const [addError, setAddError] = useState<string>();
+  const fieldsetRef = useRef<HTMLFieldSetElement>(null);
+  const shownError = addError ?? error;
+  const errorId = "groups-error";
+
+  function add() {
+    const result = addPendingGroup(typed, groups, pending);
+    if ("error" in result) {
+      setAddError(result.error);
+      return;
+    }
+    setAddError(undefined);
+    setPending(result.pending);
+    setTyped("");
+    if (result.checkGroupId !== null) {
+      const box = fieldsetRef.current?.querySelector<HTMLInputElement>(
+        `input[name="groupIds"][value="${result.checkGroupId}"]`,
+      );
+      if (box) box.checked = true;
+    }
+  }
+
+  return (
+    <fieldset
+      ref={fieldsetRef}
+      className="flex min-w-0 flex-col gap-2"
+      aria-describedby={shownError ? errorId : undefined}
+    >
+      <legend className="mb-2.5 font-display text-label font-medium text-accent uppercase">Группы</legend>
+      {(groups.length > 0 || pending.length > 0) && (
+        <div className="flex flex-wrap gap-2">
+          {groups.map((group) => (
+            <label key={group.id} className="toggle">
+              <input
+                type="checkbox"
+                name="groupIds"
+                value={group.id}
+                defaultChecked={checkedIds.includes(String(group.id))}
+                className="sr-only"
+              />
+              {group.name}
+            </label>
+          ))}
+          {pending.map((name) => (
+            <label key={name} className="toggle">
+              {/* Ticked off, the new group disappears: it was never created */}
+              <input
+                type="checkbox"
+                name="newGroups"
+                value={name}
+                checked
+                onChange={() => setPending(pending.filter((item) => item !== name))}
+                className="sr-only"
+              />
+              {name}
+            </label>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-1 flex gap-3">
+        <Input
+          type="text"
+          value={typed}
+          onChange={(event) => {
+            setTyped(event.target.value);
+            setAddError(undefined);
+          }}
+          onKeyDown={(event) => {
+            // Enter adds the group; it must not send the whole form.
+            if (event.key === "Enter") {
+              event.preventDefault();
+              add();
+            }
+          }}
+          autoComplete="off"
+          placeholder="Новая группа"
+          aria-label="Новая группа"
+          aria-invalid={shownError ? true : undefined}
+        />
+        <Button type="button" variant="outline" onClick={add} className="h-11.5 shrink-0 md:h-13.5">
+          Добавить
+        </Button>
+      </div>
+      {shownError && (
+        <p id={errorId} className="text-meta text-destructive">
+          {shownError}
         </p>
       )}
     </fieldset>
