@@ -58,9 +58,7 @@ export async function listContacts(query: string, groupId?: number | null) {
 
   // Every word must appear in the name: "ив пет" finds "Иван Петров".
   const words = query.trim().split(/\s+/).filter(Boolean);
-  const filter = words.length
-    ? and(...words.map((word) => ilike(contacts.name, `%${escapeLike(word)}%`)))
-    : undefined;
+  const filter = words.length ? and(...words.map((word) => ilike(contacts.name, `%${escapeLike(word)}%`))) : undefined;
   const where = and(filter, inGroup(groupId));
 
   try {

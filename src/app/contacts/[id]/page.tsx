@@ -14,16 +14,13 @@ import { listContactGroups } from "@/lib/groups";
 import { homeHref } from "@/lib/home-href";
 import { parseId } from "@/lib/ids";
 
-export async function generateMetadata({
-  params,
-}: PageProps<"/contacts/[id]">): Promise<Metadata> {
+export async function generateMetadata({ params }: PageProps<"/contacts/[id]">): Promise<Metadata> {
   const id = parseId((await params).id);
   const contact = id ? await getContact(id) : null;
   return { title: contact?.name ?? "Контакт не найден" };
 }
 
-const linkClass =
-  "underline decoration-border underline-offset-4 transition-colors hover:decoration-accent";
+const linkClass = "underline decoration-border underline-offset-4 transition-colors hover:decoration-accent";
 
 export default async function ContactPage({ params }: PageProps<"/contacts/[id]">) {
   const id = parseId((await params).id);
@@ -132,12 +129,8 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 border-b py-3.5 md:flex-row md:items-baseline md:gap-6 md:py-4">
-      <dt className="font-display text-label font-medium text-accent uppercase md:w-48 md:shrink-0">
-        {label}
-      </dt>
-      <dd className="min-w-0 wrap-anywhere">
-        {children || <span className="text-muted-foreground">—</span>}
-      </dd>
+      <dt className="font-display text-label font-medium text-accent uppercase md:w-48 md:shrink-0">{label}</dt>
+      <dd className="min-w-0 wrap-anywhere">{children || <span className="text-muted-foreground">—</span>}</dd>
     </div>
   );
 }

@@ -14,11 +14,7 @@ export default async function EditContactPage({ params }: PageProps<"/contacts/[
   const id = parseId((await params).id);
   if (!id) notFound();
 
-  const [contact, groups, contactGroups] = await Promise.all([
-    getContact(id),
-    listGroups(),
-    listContactGroups(id),
-  ]);
+  const [contact, groups, contactGroups] = await Promise.all([getContact(id), listGroups(), listContactGroups(id)]);
   if (!contact) notFound();
 
   const contactHref = `/contacts/${contact.id}`;

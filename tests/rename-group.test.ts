@@ -72,9 +72,7 @@ describe("renameGroup", () => {
     expect((await renameGroup(family.id, {}, formDataOf({ name: "  Родные  " }))).error).toBeUndefined();
     expect((await allGroups())[0].name).toBe("Родные");
 
-    expect((await renameGroup(family.id, {}, formDataOf({ name: "   " }))).error).toBe(
-      "Укажите название группы",
-    );
+    expect((await renameGroup(family.id, {}, formDataOf({ name: "   " }))).error).toBe("Укажите название группы");
     expect((await renameGroup(family.id, {}, formDataOf({ name: "а".repeat(51) }))).error).toBe(
       "Слишком длинное название",
     );

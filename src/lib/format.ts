@@ -21,15 +21,7 @@ export function formatGroupContactCount(count: number) {
 
 // The line under the title of the home page: the total, or «Найдено N из M» while a group is
 // selected or a search is running (M is every contact).
-export function formatContactsSummary({
-  found,
-  total,
-  filtered,
-}: {
-  found: number;
-  total: number;
-  filtered: boolean;
-}) {
+export function formatContactsSummary({ found, total, filtered }: { found: number; total: number; filtered: boolean }) {
   if (filtered) return `Найдено ${formatCount(found)} из ${formatCount(total)}`;
   return `${formatCount(total)} ${pluralize(total, ["контакт", "контакта", "контактов"])}`;
 }
@@ -57,7 +49,7 @@ export function groupDeleteDescription(name: string, contactCount: number) {
     : `Группа «${name}» будет удалена. Контактов в ней нет.`;
 }
 
-const dateTimeFormat =new Intl.DateTimeFormat("ru-RU", {
+const dateTimeFormat = new Intl.DateTimeFormat("ru-RU", {
   day: "numeric",
   month: "long",
   year: "numeric",

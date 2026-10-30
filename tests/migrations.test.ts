@@ -5,13 +5,7 @@ import { join } from "node:path";
 import type { Client } from "pg";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import {
-  applyMigrations,
-  dropDatabase,
-  recreateDatabase,
-  testDatabaseName,
-  withTestClient,
-} from "./setup/test-db";
+import { applyMigrations, dropDatabase, recreateDatabase, testDatabaseName, withTestClient } from "./setup/test-db";
 
 // A scratch database of its own: these tests need the state "before the feature" too,
 // which the shared test database (always fully migrated) cannot give.
@@ -49,13 +43,7 @@ describe("default groups migration", () => {
 
     await withTestClient(scratchDb, async (client) => {
       const groups = await client.query<{ name: string }>('select name from "groups" order by id');
-      expect(groups.rows.map((row) => row.name)).toEqual([
-        "Семья",
-        "Друзья",
-        "Знакомые",
-        "Теннис",
-        "Аналитики",
-      ]);
+      expect(groups.rows.map((row) => row.name)).toEqual(["Семья", "Друзья", "Знакомые", "Теннис", "Аналитики"]);
 
       const links = await client.query<{ count: string }>("select count(*) from contact_groups");
       expect(Number(links.rows[0].count)).toBe(0);

@@ -134,6 +134,19 @@ pnpm test:e2e
 
 При падении теста в папке `test-results` остаётся трассировка: `pnpm exec playwright show-trace <путь к trace.zip>`.
 
+### Проверка формата и типов
+
+```
+pnpm lint            # ESLint
+pnpm typecheck       # TypeScript
+pnpm format:check    # Prettier: только проверить
+pnpm format          # Prettier: сам поправить файлы
+```
+
+### CI
+
+На каждый PR в main GitHub Actions (`.github/workflows/ci.yml`) гоняет три проверки: «Lint, format, types», «Vitest and Playwright» (на настоящем Postgres) и «Build image» (собирается образ, но не публикуется). Пока они не зелёные, PR в main не вливается. Если упали e2e-тесты, трассировки лежат в артефакте `playwright-traces` на странице запуска.
+
 ## Изменения схемы базы
 
 Таблицы описаны в `src/db/schema.ts`. После правки схемы:

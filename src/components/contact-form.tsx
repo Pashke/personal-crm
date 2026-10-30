@@ -6,12 +6,7 @@ import { useActionState, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type {
-  ContactField,
-  ContactFormState,
-  ContactFrequencyValue,
-  ContactValues,
-} from "@/lib/contact-schema";
+import type { ContactField, ContactFormState, ContactFrequencyValue, ContactValues } from "@/lib/contact-schema";
 import { frequencyLabels } from "@/lib/format";
 import { addPendingGroup } from "@/lib/pending-group";
 
@@ -121,9 +116,7 @@ function FrequencyField({ selected = "none", error }: { selected?: string; error
   const errorId = "contactFrequency-error";
   return (
     <fieldset className="flex min-w-0 flex-col gap-2" aria-describedby={error ? errorId : undefined}>
-      <legend className="mb-2.5 font-display text-label font-medium text-accent uppercase">
-        Как часто общаться
-      </legend>
+      <legend className="mb-2.5 font-display text-label font-medium text-accent uppercase">Как часто общаться</legend>
       <div className="flex flex-wrap gap-2">
         {frequencyOptions.map((option) => (
           <label key={option.value} className="toggle">
@@ -187,7 +180,11 @@ function GroupsField({
   }
 
   return (
-    <fieldset ref={fieldsetRef} className="flex min-w-0 flex-col gap-2" aria-describedby={shownError ? errorId : undefined}>
+    <fieldset
+      ref={fieldsetRef}
+      className="flex min-w-0 flex-col gap-2"
+      aria-describedby={shownError ? errorId : undefined}
+    >
       <legend className="mb-2.5 font-display text-label font-medium text-accent uppercase">Группы</legend>
       {(groups.length > 0 || pending.length > 0) && (
         <div className="flex flex-wrap gap-2">

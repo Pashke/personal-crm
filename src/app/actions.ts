@@ -22,10 +22,7 @@ import { describeError, isForeignKeyViolation } from "@/lib/describe-error";
 import { isValidId, parseId } from "@/lib/ids";
 import { setContactGroups } from "@/lib/groups";
 
-export async function createContact(
-  _prevState: ContactFormState,
-  formData: FormData,
-): Promise<ContactFormState> {
+export async function createContact(_prevState: ContactFormState, formData: FormData): Promise<ContactFormState> {
   const values = readContactValues(formData);
   const parsed = contactSchema.safeParse(values);
   if (!parsed.success) {
@@ -157,10 +154,7 @@ export async function logContact(contactId: number, body: string): Promise<LogCo
 
   let noteId: number;
   try {
-    const [row] = await getDb()
-      .insert(notes)
-      .values({ contactId, body: parsed.data.body })
-      .returning({ id: notes.id });
+    const [row] = await getDb().insert(notes).values({ contactId, body: parsed.data.body }).returning({ id: notes.id });
     noteId = row.id;
   } catch (error) {
     if (isForeignKeyViolation(error)) {
@@ -190,12 +184,7 @@ export async function undoContactLog(noteId: number): Promise<UndoContactLogResu
   try {
     deleted = await getDb()
       .delete(notes)
-      .where(
-        and(
-          eq(notes.id, noteId),
-          gt(notes.createdAt, sql`now() - make_interval(secs => ${UNDO_WINDOW_SECONDS})`),
-        ),
-      )
+      .where(and(eq(notes.id, noteId), gt(notes.createdAt, sql`now() - make_interval(secs => ${UNDO_WINDOW_SECONDS})`)))
       .returning({ contactId: notes.contactId });
   } catch (error) {
     console.error("Failed to undo contact log", { noteId, error: describeError(error) });

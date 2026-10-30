@@ -42,7 +42,10 @@ export async function setContactGroups(tx: Tx, contactId: number, groupIds: numb
 
   if (newNames.length > 0) {
     // The unique index on lower(name) turns a repeat into "do nothing"; ids follow the order of the names.
-    await tx.insert(groups).values(newNames.map((name) => ({ name }))).onConflictDoNothing();
+    await tx
+      .insert(groups)
+      .values(newNames.map((name) => ({ name })))
+      .onConflictDoNothing();
     const named = await tx
       .select({ id: groups.id })
       .from(groups)

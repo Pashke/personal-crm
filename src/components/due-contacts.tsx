@@ -144,11 +144,7 @@ export function DueContacts({ rows }: { rows: DueContactRow[] }) {
               </div>
 
               {open && (
-                <QuickNote
-                  row={row}
-                  onCancel={() => cancel(row.id)}
-                  onSaved={(noteId) => saved(row.id, noteId)}
-                />
+                <QuickNote row={row} onCancel={() => cancel(row.id)} onSaved={(noteId) => saved(row.id, noteId)} />
               )}
             </li>
           );

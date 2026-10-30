@@ -1,14 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  index,
-  integer,
-  pgEnum,
-  pgTable,
-  primaryKey,
-  text,
-  timestamp,
-  uniqueIndex,
-} from "drizzle-orm/pg-core";
+import { index, integer, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 // How often the user wants to be in touch with a contact. NULL in the column means "not set".
 // The list lives here so the form, validation and labels all take it from one place.

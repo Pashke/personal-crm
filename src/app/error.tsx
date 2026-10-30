@@ -4,13 +4,7 @@ import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 
-export default function ErrorPage({
-  error,
-  retry,
-}: {
-  error: Error & { digest?: string };
-  retry: () => void;
-}) {
+export default function ErrorPage({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     console.error("Page failed to render", error);
   }, [error]);

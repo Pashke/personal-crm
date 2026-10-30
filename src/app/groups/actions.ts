@@ -30,11 +30,7 @@ export async function createGroup(_prevState: GroupFormState, formData: FormData
   return { savedAt: Date.now() };
 }
 
-export async function renameGroup(
-  id: number,
-  _prevState: GroupFormState,
-  formData: FormData,
-): Promise<GroupFormState> {
+export async function renameGroup(id: number, _prevState: GroupFormState, formData: FormData): Promise<GroupFormState> {
   const name = String(formData.get("name") ?? "");
   if (!isValidId(id)) {
     return { name, error: "Группа не найдена." };

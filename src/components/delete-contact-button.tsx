@@ -52,8 +52,7 @@ export function DeleteContactButton({ action, name, noteCount }: DeleteContactBu
             {noteCount > 0 ? (
               <>
                 Контакт {quotedName} и {formatCount(noteCount)}{" "}
-                {pluralize(noteCount, ["заметка", "заметки", "заметок"])} будут удалены. Вернуть их не
-                получится.
+                {pluralize(noteCount, ["заметка", "заметки", "заметок"])} будут удалены. Вернуть их не получится.
               </>
             ) : (
               <>Контакт {quotedName} будет удалён. Вернуть его не получится.</>
