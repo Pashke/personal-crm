@@ -83,3 +83,38 @@ describe("default groups migration", () => {
     });
   });
 });
+
+describe("contact frequency migration", () => {
+  it("Контакты, добавленные до фичи: get «Не задано», fields and notes unchanged", async () => {
+    await applyMigrations(scratchDb, migrationsUpTo("0000_init"));
+
+    const read = (client: Client) =>
+      Promise.all([
+        client.query("select * from contacts order by id"),
+        client.query("select * from notes order by id"),
+      ]);
+
+    const before = await withTestClient(scratchDb, async (client) => {
+      await client.query(
+        `insert into contacts (name, how_met, phone, email, created_at) values
+           ('Анна Соколова', 'Однокурсница', '+7 900 123-45-67', 'anna@example.com', '2025-03-01T12:00:00Z'),
+           ('Иван Петров', null, null, null, '2026-01-15T12:00:00Z')`,
+      );
+      await client.query(
+        `insert into notes (contact_id, body, created_at) values
+           (1, 'Созвонились', '2026-09-01T12:00:00Z'), (2, 'Встретились на кофе', '2026-10-05T12:00:00Z')`,
+      );
+      return read(client);
+    });
+
+    await applyMigrations(scratchDb);
+
+    await withTestClient(scratchDb, async (client) => {
+      const [contacts, notes] = await read(client);
+      expect(contacts.rows.map((row) => row.contact_frequency)).toEqual([null, null]);
+      // Every other column is as it was: the old rows plus the new column set to «Не задано».
+      expect(contacts.rows).toEqual(before[0].rows.map((row) => ({ ...row, contact_frequency: null })));
+      expect(notes.rows).toEqual(before[1].rows);
+    });
+  });
+});
