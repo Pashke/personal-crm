@@ -31,7 +31,17 @@ export async function addToGroups(contactId: number, groupIds: number[]) {
 }
 
 export async function addNoteRow(contactId: number, body: string, createdAt?: Date) {
-  await getDb().insert(notes).values({ contactId, body, createdAt });
+  const [row] = await getDb().insert(notes).values({ contactId, body, createdAt }).returning();
+  return row;
+}
+
+export async function contactRow(id: number) {
+  const [row] = await getDb().select().from(contacts).where(eq(contacts.id, id));
+  return row;
+}
+
+export async function notesOf(contactId: number) {
+  return getDb().select().from(notes).where(eq(notes.contactId, contactId)).orderBy(notes.id);
 }
 
 // Ids of the groups a contact is stored in, ascending.

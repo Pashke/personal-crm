@@ -4,9 +4,7 @@ import { addNote, deleteContact } from "@/app/actions";
 import { listContacts, listDueContacts, listDueContactsForHome } from "@/lib/contacts";
 
 import { addNoteRow, addToGroups, createContactRow, createGroups } from "./setup/factories";
-import { formDataOf, redirectTarget } from "./setup/helpers";
-
-const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+import { DAY_MS, MINUTE_MS, daysAgo, formDataOf, msAgo, redirectTarget } from "./setup/helpers";
 
 const dueNames = async (groupId?: number | null) => (await listDueContacts(groupId)).map((row) => row.name);
 
@@ -67,6 +65,27 @@ describe("listDueContacts", () => {
   it("the most overdue come first", async () => {
     await createContactRow({ name: "Борис", contactFrequency: "week", createdAt: daysAgo(10) });
     await createContactRow({ name: "Анна", contactFrequency: "week", createdAt: daysAgo(60) });
+
+    expect(await dueNames()).toEqual(["Анна", "Борис"]);
+  });
+
+  it("Сортировка по сроку: by the due date, whatever the frequency and the last contact", async () => {
+    // The spec's people with their names swapped, so the alphabet cannot give the right order
+    // by chance. By the last contact the order would be the reverse one.
+    const oleg = await createContactRow({ name: "Олег", contactFrequency: "week", createdAt: daysAgo(500) });
+    await addNoteRow(oleg.id, "Созвонились", daysAgo(19)); // due 12 days ago
+    const ivan = await createContactRow({ name: "Иван", contactFrequency: "month", createdAt: daysAgo(500) });
+    await addNoteRow(ivan.id, "Созвонились", daysAgo(33)); // due 2–5 days ago, by the month's length
+    const anna = await createContactRow({ name: "Анна", contactFrequency: "year", createdAt: daysAgo(500) });
+    await addNoteRow(anna.id, "Созвонились", msAgo(366 * DAY_MS + 60 * MINUTE_MS)); // due today or a day ago
+
+    expect(await dueNames()).toEqual(["Олег", "Иван", "Анна"]);
+  });
+
+  it("Сортировка по сроку: the same due date goes by name", async () => {
+    const created = daysAgo(30);
+    await createContactRow({ name: "Борис", contactFrequency: "week", createdAt: created });
+    await createContactRow({ name: "Анна", contactFrequency: "week", createdAt: created });
 
     expect(await dueNames()).toEqual(["Анна", "Борис"]);
   });

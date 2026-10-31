@@ -13,6 +13,13 @@ export async function redirectTarget(run: () => Promise<unknown>): Promise<strin
   throw new Error("Expected the action to redirect, but it returned a result");
 }
 
+export const MINUTE_MS = 60 * 1000;
+export const DAY_MS = 24 * 60 * MINUTE_MS;
+
+// A moment in the past, counted back from now.
+export const msAgo = (ms: number) => new Date(Date.now() - ms);
+export const daysAgo = (days: number) => msAgo(days * DAY_MS);
+
 // A form submission as the browser sends it. Several values for one name are allowed
 // (checkboxes): pass an array.
 export function formDataOf(fields: Record<string, string | string[]>) {
