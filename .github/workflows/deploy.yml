@@ -1,4 +1,4 @@
-# Push to main -> image tagged with the commit SHA -> GHCR -> server: migrations -> new version -> smoke /health.
+# Push to main -> image tagged with the commit SHA -> GHCR -> server: database backup -> migrations -> new version -> smoke /health.
 # The deploy logic lives in deploy/ (see deploy/ci-deploy.sh and deploy/deploy.sh); this file only calls it.
 name: Deploy
 
@@ -53,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Migrations, new version, smoke /health
+      - name: Backup, migrations, new version, smoke /health
         run: bash deploy/ci-deploy.sh
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}

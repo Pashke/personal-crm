@@ -7,17 +7,14 @@
 #                          otherwise - the one before it
 #   rollback.sh <sha>    - to a specific version; its image must still be on the server
 #
-# It runs the normal deploy (migrations, smoke /health) with the older image.
+# It runs the normal deploy (database backup, migrations, smoke /health) with the older image.
 # Database changes made by the newer version are NOT undone: the older version works on the current database.
+# To also get the database of that time back, run restore.sh after the rollback.
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 current="$(read_version "$CURRENT_FILE")"
-running_image="$(docker ps --all \
-  --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" \
-  --filter "label=com.docker.compose.service=app" \
-  --format '{{.Image}}' | head -n 1)"
-running="${running_image##*:}"
+running="$(running_version)"
 
 if [ -n "${1:-}" ]; then
   target="$1"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploys one version of the app on the server, as user "deploy":
-#   image -> database -> migrations (one-off container) -> new app container -> smoke /health -> cleanup.
+#   database backup -> image -> migrations (one-off container) -> new app container -> smoke /health -> cleanup.
 # GitHub Actions calls it through deploy/ci-deploy.sh on every push to main.
 # It can also be run by hand with an older version: that is how rollback.sh works.
 #
@@ -8,8 +8,10 @@
 #   If the image is not on the server yet, a GHCR token is read from stdin to pull it.
 #
 # Any failure stops the script with a non-zero exit code. There is no automatic rollback:
+#   - backup failed     -> nothing was changed, the old version keeps running;
 #   - migrations failed -> the new version is not started, the old one keeps running;
 #   - smoke failed      -> the new version is already started; roll back by hand (rollback.sh).
+# The database can be put back from the backup by hand only, with restore.sh.
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 trap 'printf "\nERROR: command failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
@@ -18,15 +20,26 @@ TAG="${1:-}"
 REGISTRY_USER="${2:-deploy}"
 is_sha "$TAG" || die "usage: deploy.sh <full 40-character git commit sha> [registry-user]"
 IMAGE="$IMAGE_REPO:$TAG"
-APP_URL="https://app.whobook.ru"
 
 # One deploy at a time: a manual run waits for a running CI deploy and vice versa.
+# restore.sh takes the same lock, so a deploy also waits for a running restore.
 mkdir -p "$STATE_DIR"
 exec 9>"$STATE_DIR/deploy.lock"
-flock -w 600 9 || die "another deploy has been running for 10 minutes, giving up"
+flock -w 600 9 || die "another deploy or a restore has been running for 10 minutes, giving up"
 
 log "Deploying $TAG"
 check_env_file
+# compose needs the app image name even for commands that only touch postgres.
+# Starting postgres does not pull the app image.
+export APP_IMAGE="$IMAGE"
+
+# ---------------------------------------------------------------- database backup
+before="$(current_app_version)"
+log "Database backup (app version before this deploy: ${before:-none})"
+# stdin may hold the GHCR token for the image step below: nothing here may read it.
+compose up --detach --wait postgres < /dev/null
+backup_db deploy "${before:-none}"
+prune_deploy_backups
 
 # ---------------------------------------------------------------- image
 log "Image $IMAGE"
@@ -44,11 +57,6 @@ else
   rm -rf "$docker_config"
   info "pulled"
 fi
-export APP_IMAGE="$IMAGE"
-
-# ---------------------------------------------------------------- database
-log "Database"
-compose up --detach --wait postgres
 
 # ---------------------------------------------------------------- migrations
 log "Migrations (one-off container from the new image)"
@@ -68,25 +76,7 @@ info "app container runs $running"
 
 # ---------------------------------------------------------------- smoke
 log "Smoke test: GET /health"
-smoke() {
-  local name=$1; shift
-  local code=""
-  for _ in $(seq 1 15); do
-    code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 "$@" || true)"
-    if [ "$code" = "200" ]; then
-      info "$name: 200"
-      return 0
-    fi
-    sleep 2
-  done
-  info "$name: $code"
-  return 1
-}
-smoke_ok=1
-smoke "app container, http://127.0.0.1:3000/health" "http://127.0.0.1:3000/health" || smoke_ok=0
-# The same request through nginx and HTTPS, as a visitor would make it.
-smoke "nginx, $APP_URL/health" --resolve "app.whobook.ru:443:127.0.0.1" "$APP_URL/health" || smoke_ok=0
-if [ "$smoke_ok" != 1 ]; then
+if ! check_health; then
   compose logs --tail 50 app || true
   die "smoke test failed: version $TAG is running but /health does not answer 200. Nothing was rolled back"
 fi
