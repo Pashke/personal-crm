@@ -4,6 +4,7 @@ import { formatGroupNames } from "@/lib/format";
 import { homeHref } from "@/lib/home-href";
 import { listContactGroups } from "@/lib/groups";
 
+import { userA } from "./setup/current-user";
 import { addToGroups, createContactRow, createGroups } from "./setup/factories";
 
 // The page of a contact shows these two values: the names in one line and a link per group.
@@ -13,7 +14,7 @@ describe("groups on the page of a contact", () => {
     const anna = await createContactRow({ name: "Анна" });
     await addToGroups(anna.id, [tennis.id, family.id]);
 
-    const groups = await listContactGroups(anna.id);
+    const groups = await listContactGroups(userA().id, anna.id);
 
     expect(formatGroupNames(groups.map((group) => group.name))).toBe("Семья, Теннис");
   });
@@ -22,7 +23,7 @@ describe("groups on the page of a contact", () => {
     await createGroups("Семья");
     const anna = await createContactRow({ name: "Анна" });
 
-    expect(await listContactGroups(anna.id)).toEqual([]);
+    expect(await listContactGroups(userA().id, anna.id)).toEqual([]);
   });
 
   it("Переход к группе: each group links to the home page with that group selected", async () => {
@@ -30,7 +31,7 @@ describe("groups on the page of a contact", () => {
     const anna = await createContactRow({ name: "Анна" });
     await addToGroups(anna.id, [family.id, tennis.id]);
 
-    const links = (await listContactGroups(anna.id)).map((group) => homeHref({ groupId: group.id }));
+    const links = (await listContactGroups(userA().id, anna.id)).map((group) => homeHref({ groupId: group.id }));
 
     expect(links).toEqual([`/?group=${family.id}`, `/?group=${tennis.id}`]);
   });

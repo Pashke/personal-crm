@@ -4,6 +4,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client, Pool } from "pg";
 
 import { getDatabaseConfig } from "../../src/db/config";
+import { ownerEmailSetting } from "../../src/db/owner-email";
 
 const TEST_SUFFIX = "_test";
 
@@ -56,11 +57,20 @@ export async function dropDatabase(name: string) {
   await withAdminClient((client) => client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`));
 }
 
+// The owner of the data that existed before sign-in, in test databases (see drizzle/0005_*.sql).
+export const TEST_OWNER_EMAIL = "owner@example.com";
+
 // Applies migrations from a folder the way the server does (`drizzle-kit migrate` calls the same migrator):
-// only the ones the database has not seen yet.
-export async function applyMigrations(name: string, migrationsFolder = "drizzle") {
+// only the ones the database has not seen yet. The owner's email reaches the migrations the way
+// drizzle.config.ts passes it, as a connection setting; null leaves it out.
+export async function applyMigrations(
+  name: string,
+  migrationsFolder = "drizzle",
+  { ownerEmail = TEST_OWNER_EMAIL }: { ownerEmail?: string | null } = {},
+) {
   assertTestDatabaseName(name);
-  const pool = new Pool(connectionConfig(name));
+  const options = ownerEmail === null ? undefined : ownerEmailSetting(ownerEmail);
+  const pool = new Pool({ ...connectionConfig(name), options });
   try {
     await migrate(drizzle(pool), { migrationsFolder });
   } finally {

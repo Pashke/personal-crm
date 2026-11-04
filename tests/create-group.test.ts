@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { createGroup } from "@/app/groups/actions";
+import { createGroup } from "@/app/(app)/groups/actions";
 import { listGroups } from "@/lib/groups";
 
+import { userA } from "./setup/current-user";
 import { allGroups, createGroups } from "./setup/factories";
 import { formDataOf } from "./setup/helpers";
 
@@ -16,7 +17,7 @@ describe("createGroup", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.savedAt).toEqual(expect.any(Number));
-    const groups = await listGroups();
+    const groups = await listGroups(userA().id);
     expect(groups.map((group) => group.name)).toEqual([...defaultGroups, "Коллеги"]);
     expect(groups.at(-1)?.contactCount).toBe(0);
   });

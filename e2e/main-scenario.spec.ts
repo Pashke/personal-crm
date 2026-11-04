@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
-
 import { resetData, seedContacts } from "./support/db";
+import { expect, signIn, test } from "./support/sign-in";
 
 const seeded = ["Анна Смирнова", "Борис Иванов", "Виктор Петров"];
 const newName = "Ольга Кузнецова";
@@ -8,7 +7,6 @@ const noteText = "Договорились созвониться в пятни�
 
 test.beforeEach(async () => {
   await resetData();
-  await seedContacts(seeded);
 });
 
 // specs/01-продуктовая-идея.md, «Главный сценарий»
@@ -16,6 +14,10 @@ test("main scenario: list, add a contact, find it, add a note, see the same in a
   page,
   browser,
 }) => {
+  // 0. Sign in; the user already has three contacts
+  const email = await signIn(page);
+  await seedContacts(email, seeded);
+
   // 1. Open: the list of all contacts
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Контакты" })).toBeVisible();
@@ -29,7 +31,7 @@ test("main scenario: list, add a contact, find it, add a note, see the same in a
   await page.getByLabel("Имя").fill(newName);
   await page.getByLabel("Откуда знакомы").fill("Познакомились на конференции");
   // The groups block has its own «Добавить»: the form's one is the submit button
-  await page.locator("form button[type=submit]").click();
+  await page.getByRole("main").locator("form button[type=submit]").click();
   await expect(page.getByText("4 контакта")).toBeVisible();
   await expect(page.getByRole("link", { name: newName })).toBeVisible();
 
@@ -48,10 +50,10 @@ test("main scenario: list, add a contact, find it, add a note, see the same in a
   await page.reload();
   await expect(page.getByRole("list").getByText(noteText)).toBeVisible();
 
-  // Another browser (a clean profile, no shared cookies) at the same address: the same contacts and the note
+  // Another browser (a clean profile, no shared cookies) signed in as the same user: the same contacts and the note
   const other = await browser.newContext();
   const otherPage = await other.newPage();
-  await otherPage.goto("/");
+  await signIn(otherPage, email);
   await expect(otherPage.getByText("4 контакта")).toBeVisible();
   for (const name of [...seeded, newName]) {
     await expect(otherPage.getByRole("link", { name })).toBeVisible();

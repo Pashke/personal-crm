@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 
-import { createGroup } from "@/app/groups/actions";
+import { createGroup } from "@/app/(app)/groups/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

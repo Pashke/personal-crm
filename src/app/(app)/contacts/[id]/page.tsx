@@ -13,23 +13,26 @@ import { formatDateTime, formatDueStatus, frequencyLabels } from "@/lib/format";
 import { listContactGroups } from "@/lib/groups";
 import { homeHref } from "@/lib/home-href";
 import { parseId } from "@/lib/ids";
+import { requireUser } from "@/lib/session";
 
 export async function generateMetadata({ params }: PageProps<"/contacts/[id]">): Promise<Metadata> {
+  const user = await requireUser();
   const id = parseId((await params).id);
-  const contact = id ? await getContact(id) : null;
+  const contact = id ? await getContact(user.id, id) : null;
   return { title: contact?.name ?? "Контакт не найден" };
 }
 
 const linkClass = "underline decoration-border underline-offset-4 transition-colors hover:decoration-accent";
 
 export default async function ContactPage({ params }: PageProps<"/contacts/[id]">) {
+  const user = await requireUser();
   const id = parseId((await params).id);
   if (!id) notFound();
 
   const [contact, contactNotes, contactGroups] = await Promise.all([
-    getContact(id),
-    listNotes(id),
-    listContactGroups(id),
+    getContact(user.id, id),
+    listNotes(user.id, id),
+    listContactGroups(user.id, id),
   ]);
   if (!contact) notFound();
 

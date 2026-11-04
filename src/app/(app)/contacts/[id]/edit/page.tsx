@@ -7,14 +7,20 @@ import { ContactForm } from "@/components/contact-form";
 import { getContact } from "@/lib/contacts";
 import { listContactGroups, listGroups } from "@/lib/groups";
 import { parseId } from "@/lib/ids";
+import { requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Изменить контакт" };
 
 export default async function EditContactPage({ params }: PageProps<"/contacts/[id]/edit">) {
+  const user = await requireUser();
   const id = parseId((await params).id);
   if (!id) notFound();
 
-  const [contact, groups, contactGroups] = await Promise.all([getContact(id), listGroups(), listContactGroups(id)]);
+  const [contact, groups, contactGroups] = await Promise.all([
+    getContact(user.id, id),
+    listGroups(user.id),
+    listContactGroups(user.id, id),
+  ]);
   if (!contact) notFound();
 
   const contactHref = `/contacts/${contact.id}`;

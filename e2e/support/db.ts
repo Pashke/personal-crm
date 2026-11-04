@@ -1,19 +1,32 @@
+import type { Client } from "pg";
+
 import type { ContactFrequency } from "../../src/db/schema";
 import { testDatabaseName, withTestClient } from "../../tests/setup/test-db";
 
 // Test data goes straight into the database, so a scenario does not depend on the screens of another one.
+// Contacts and groups are seeded for a user who has already signed in (see signIn): `owner` is their address.
 
-// Every test starts from empty tables.
+// Every test starts from empty tables: no contacts, no users, no sessions, no sign-in links.
 export async function resetData() {
   await withTestClient(testDatabaseName(), async (client) => {
-    await client.query("TRUNCATE contacts, groups, notes, contact_groups RESTART IDENTITY CASCADE");
+    await client.query(
+      `TRUNCATE contacts, groups, notes, contact_groups, users, sessions, accounts, verifications, sign_in_emails
+       RESTART IDENTITY CASCADE`,
+    );
   });
 }
 
-export async function seedContacts(names: string[]) {
+async function userIdOf(client: Client, email: string) {
+  const { rows } = await client.query<{ id: string }>("SELECT id FROM users WHERE email = $1", [email]);
+  if (rows.length === 0) throw new Error(`No user ${email}: sign in before seeding their contacts`);
+  return rows[0].id;
+}
+
+export async function seedContacts(owner: string, names: string[]) {
   await withTestClient(testDatabaseName(), async (client) => {
+    const userId = await userIdOf(client, owner);
     for (const name of names) {
-      await client.query("INSERT INTO contacts (name) VALUES ($1)", [name]);
+      await client.query("INSERT INTO contacts (user_id, name) VALUES ($1, $2)", [userId, name]);
     }
   });
 }
@@ -24,16 +37,20 @@ type SeededContact = {
   // When the contact was added; now by default.
   createdAt?: Date;
   notes?: { body: string; createdAt: Date }[];
-  // Group names; a group is created on first use.
+  // Group names; a group of the owner is created on first use.
   groups?: string[];
 };
 
-// One contact with its frequency, notes and groups; returns its id.
-export async function seedContact({ name, frequency, createdAt = new Date(), notes = [], groups = [] }: SeededContact) {
+// One contact of the owner with its frequency, notes and groups; returns its id.
+export async function seedContact(
+  owner: string,
+  { name, frequency, createdAt = new Date(), notes = [], groups = [] }: SeededContact,
+) {
   return withTestClient(testDatabaseName(), async (client) => {
+    const userId = await userIdOf(client, owner);
     const { rows } = await client.query<{ id: number }>(
-      "INSERT INTO contacts (name, contact_frequency, created_at) VALUES ($1, $2, $3) RETURNING id",
-      [name, frequency ?? null, createdAt],
+      "INSERT INTO contacts (user_id, name, contact_frequency, created_at) VALUES ($1, $2, $3, $4) RETURNING id",
+      [userId, name, frequency ?? null, createdAt],
     );
     const id = rows[0].id;
     for (const note of notes) {
@@ -44,10 +61,14 @@ export async function seedContact({ name, frequency, createdAt = new Date(), not
       ]);
     }
     for (const group of groups) {
-      await client.query("INSERT INTO groups (name) VALUES ($1) ON CONFLICT ((lower(name))) DO NOTHING", [group]);
       await client.query(
-        "INSERT INTO contact_groups (contact_id, group_id) SELECT $1, id FROM groups WHERE lower(name) = lower($2)",
-        [id, group],
+        "INSERT INTO groups (user_id, name) VALUES ($1, $2) ON CONFLICT (user_id, (lower(name))) DO NOTHING",
+        [userId, group],
+      );
+      await client.query(
+        `INSERT INTO contact_groups (contact_id, group_id)
+         SELECT $1, id FROM groups WHERE user_id = $2 AND lower(name) = lower($3)`,
+        [id, userId, group],
       );
     }
     return id;

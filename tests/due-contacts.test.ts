@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import { addNote, deleteContact } from "@/app/actions";
 import { listContacts, listDueContacts, listDueContactsForHome } from "@/lib/contacts";
 
+import { userA } from "./setup/current-user";
 import { addNoteRow, addToGroups, createContactRow, createGroups } from "./setup/factories";
 import { DAY_MS, MINUTE_MS, daysAgo, formDataOf, msAgo, redirectTarget } from "./setup/helpers";
 
-const dueNames = async (groupId?: number | null) => (await listDueContacts(groupId)).map((row) => row.name);
+const dueNames = async (groupId?: number | null) => (await listDueContacts(userA().id, groupId)).map((row) => row.name);
 
 describe("listDueContacts", () => {
   it("Срок наступил: weekly contact, last note 10 days ago", async () => {
@@ -44,7 +45,7 @@ describe("listDueContacts", () => {
     await redirectTarget(() => deleteContact(anna.id));
 
     expect(await dueNames()).toEqual([]);
-    expect(await listContacts("")).toEqual([]);
+    expect(await listContacts(userA().id, "")).toEqual([]);
   });
 
   it("Общий список не меняется: a contact from the block keeps its place in the list", async () => {
@@ -53,7 +54,7 @@ describe("listDueContacts", () => {
     await createContactRow({ name: "Вера" });
 
     expect(await dueNames()).toEqual(["Анна"]);
-    expect((await listContacts("")).map((row) => row.name)).toEqual(["Анна", "Борис", "Вера"]);
+    expect((await listContacts(userA().id, "")).map((row) => row.name)).toEqual(["Анна", "Борис", "Вера"]);
   });
 
   it("Никому не пора: an empty block", async () => {
@@ -132,14 +133,14 @@ describe("listDueContactsForHome", () => {
   it("Идёт поиск: the block is not requested while a search is typed", async () => {
     await createContactRow({ name: "Анна", contactFrequency: "week", createdAt: daysAgo(30) });
 
-    expect((await listDueContactsForHome("", null)).map((row) => row.name)).toEqual(["Анна"]);
-    expect(await listDueContactsForHome("Ан", null)).toEqual([]);
+    expect((await listDueContactsForHome(userA().id, "", null)).map((row) => row.name)).toEqual(["Анна"]);
+    expect(await listDueContactsForHome(userA().id, "Ан", null)).toEqual([]);
   });
 
   it("passes the group on", async () => {
     const [family] = await createGroups("Семья");
     await createContactRow({ name: "Анна", contactFrequency: "week", createdAt: daysAgo(30) });
 
-    expect(await listDueContactsForHome("", family.id)).toEqual([]);
+    expect(await listDueContactsForHome(userA().id, "", family.id)).toEqual([]);
   });
 });

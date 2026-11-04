@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { createContact, deleteContact, updateContact } from "@/app/actions";
-import { deleteGroup } from "@/app/groups/actions";
+import { deleteGroup } from "@/app/(app)/groups/actions";
 import { emptyContactValues } from "@/lib/contact-schema";
 import { listContacts } from "@/lib/contacts";
 import { listContactGroups } from "@/lib/groups";
 
+import { userA } from "./setup/current-user";
 import { addToGroups, createContactRow, createGroups, groupIdsOf } from "./setup/factories";
 import { formDataOf, redirectTarget } from "./setup/helpers";
 
@@ -27,7 +28,7 @@ describe("contact groups in createContact", () => {
 
     const id = await createWith({ groupIds: [String(friends.id), String(tennis.id)] });
 
-    expect(await listContactGroups(id)).toEqual([friends, tennis]);
+    expect(await listContactGroups(userA().id, id)).toEqual([friends, tennis]);
   });
 
   it("Без групп: saved without groups and listed under «Все»", async () => {
@@ -36,7 +37,7 @@ describe("contact groups in createContact", () => {
     const id = await createWith({});
 
     expect(await groupIdsOf(id)).toEqual([]);
-    expect((await listContacts("")).map((contact) => contact.id)).toContain(id);
+    expect((await listContacts(userA().id, "")).map((contact) => contact.id)).toContain(id);
   });
 
   it("a group checked twice is stored once", async () => {
@@ -66,7 +67,7 @@ describe("contact groups in updateContact", () => {
 
     await updateWith(anna.id, { groupIds: [String(tennis.id), String(family.id)] });
 
-    expect(await listContactGroups(anna.id)).toEqual([family, tennis]);
+    expect(await listContactGroups(userA().id, anna.id)).toEqual([family, tennis]);
   });
 
   it("no checked groups at all clears the contact's groups", async () => {

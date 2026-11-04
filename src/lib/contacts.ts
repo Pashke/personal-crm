@@ -10,6 +10,8 @@ import { describeError } from "@/lib/describe-error";
 
 // Every read waits for a request: contacts change at runtime, so pages must never be
 // prerendered at build time with a frozen snapshot of the database.
+// Every read takes the signed-in user's id first and returns only that user's contacts:
+// the condition is part of each query, so someone else's id behaves like one that does not exist.
 
 // The two expressions below need `notes` left-joined to `contacts` and the query grouped
 // by contacts.id. The home page block and the contact page both use them, so the due date
@@ -43,23 +45,26 @@ function inGroup(groupId: number | null | undefined) {
 }
 
 // The names of the groups a contact is in, in the common order (by group id); empty without groups.
-// Written with plain names: inside a single-table query Drizzle drops table prefixes from columns,
-// which would make the inner "id" refer to the wrong table.
+// Only groups of the contact's owner count. Written with plain names: inside a single-table query
+// Drizzle drops table prefixes from columns, which would make the inner "id" refer to the wrong table.
 const groupNames = sql<string[]>`coalesce((
   select array_agg(g.name order by g.id)
   from contact_groups cg
-  join groups g on g.id = cg.group_id
+  join groups g on g.id = cg.group_id and g.user_id = "contacts"."user_id"
   where cg.contact_id = "contacts"."id"
 ), '{}')`;
 
-// The list for the home page: every contact, or the members of one group; `query` narrows it by name.
-export async function listContacts(query: string, groupId?: number | null) {
+const ownedBy = (userId: string) => eq(contacts.userId, userId);
+
+// The list for the home page: every contact of the user, or the members of one group;
+// `query` narrows it by name.
+export async function listContacts(userId: string, query: string, groupId?: number | null) {
   await connection();
 
   // Every word must appear in the name: "ив пет" finds "Иван Петров".
   const words = query.trim().split(/\s+/).filter(Boolean);
   const filter = words.length ? and(...words.map((word) => ilike(contacts.name, `%${escapeLike(word)}%`))) : undefined;
-  const where = and(filter, inGroup(groupId));
+  const where = and(ownedBy(userId), filter, inGroup(groupId));
 
   try {
     return await getDb()
@@ -82,16 +87,16 @@ export async function listContacts(query: string, groupId?: number | null) {
   }
 }
 
-export async function countContacts() {
+export async function countContacts(userId: string) {
   await connection();
-  const [row] = await getDb().select({ value: count() }).from(contacts);
+  const [row] = await getDb().select({ value: count() }).from(contacts).where(ownedBy(userId));
   return row.value;
 }
 
 // Contacts it is time to get in touch with: a frequency is set and the due date has come.
 // The most overdue come first; the page decides how many of them to show.
 // With a group selected, only the members of that group.
-export async function listDueContacts(groupId?: number | null) {
+export async function listDueContacts(userId: string, groupId?: number | null) {
   await connection();
   return getDb()
     .select({
@@ -104,36 +109,39 @@ export async function listDueContacts(groupId?: number | null) {
     })
     .from(contacts)
     .leftJoin(notes, eq(notes.contactId, contacts.id))
-    .where(and(isNotNull(contacts.contactFrequency), inGroup(groupId)))
+    .where(and(ownedBy(userId), isNotNull(contacts.contactFrequency), inGroup(groupId)))
     .groupBy(contacts.id)
     .having(sql`${dueAt} <= now()`)
     .orderBy(dueAt, sql`${contacts.name} collate "ru-x-icu"`, asc(contacts.id));
 }
 
 // «Пора связаться» as the home page shows it: hidden while a search is typed, so not even queried then.
-export async function listDueContactsForHome(query: string, groupId: number | null) {
-  return query ? [] : listDueContacts(groupId);
+export async function listDueContactsForHome(userId: string, query: string, groupId: number | null) {
+  return query ? [] : listDueContacts(userId, groupId);
 }
 
 // Wrapped in cache() so the page and its metadata share one query per request.
 // Besides the contact itself, returns the moment of its latest note and the due date.
-export const getContact = cache(async (id: number) => {
+// Someone else's contact is null, the same as one that does not exist.
+export const getContact = cache(async (userId: string, id: number) => {
   await connection();
   const [contact] = await getDb()
     .select({ ...getTableColumns(contacts), lastNoteAt, dueAt })
     .from(contacts)
     .leftJoin(notes, eq(notes.contactId, contacts.id))
-    .where(eq(contacts.id, id))
+    .where(and(eq(contacts.id, id), ownedBy(userId)))
     .groupBy(contacts.id);
   return contact ?? null;
 });
 
-export async function listNotes(contactId: number) {
+// The notes of a contact, the newest first; none for someone else's contact.
+export async function listNotes(userId: string, contactId: number) {
   await connection();
   return getDb()
-    .select()
+    .select(getTableColumns(notes))
     .from(notes)
-    .where(eq(notes.contactId, contactId))
+    .innerJoin(contacts, eq(contacts.id, notes.contactId))
+    .where(and(eq(notes.contactId, contactId), ownedBy(userId)))
     .orderBy(desc(notes.createdAt), desc(notes.id));
 }
 

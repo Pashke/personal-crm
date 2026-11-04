@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import { groups } from "@/db/schema";
 import { listContactGroups, listGroups } from "@/lib/groups";
 
+import { userA } from "./setup/current-user";
 import { addToGroups, createContactRow, createGroups } from "./setup/factories";
 import { redirectTarget } from "./setup/helpers";
 
@@ -17,7 +18,7 @@ describe("listGroups", () => {
     await addToGroups(anna.id, [family.id, tennis.id]);
     await addToGroups(ivan.id, [tennis.id]);
 
-    expect(await listGroups()).toEqual([
+    expect(await listGroups(userA().id)).toEqual([
       { id: family.id, name: "Семья", contactCount: 1 },
       { id: friends.id, name: "Друзья", contactCount: 0 },
       { id: tennis.id, name: "Теннис", contactCount: 2 },
@@ -25,7 +26,7 @@ describe("listGroups", () => {
   });
 
   it("returns an empty list when there are no groups", async () => {
-    expect(await listGroups()).toEqual([]);
+    expect(await listGroups(userA().id)).toEqual([]);
   });
 
   it("Удалённый контакт: groups stay, each has one contact less", async () => {
@@ -37,7 +38,7 @@ describe("listGroups", () => {
 
     await redirectTarget(() => deleteContact(anna.id));
 
-    expect(await listGroups()).toEqual([
+    expect(await listGroups(userA().id)).toEqual([
       { id: family.id, name: "Семья", contactCount: 1 },
       { id: tennis.id, name: "Теннис", contactCount: 1 },
     ]);
@@ -51,7 +52,7 @@ describe("listContactGroups", () => {
     await addToGroups(anna.id, [tennis.id]);
     await addToGroups(anna.id, [family.id]);
 
-    expect(await listContactGroups(anna.id)).toEqual([
+    expect(await listContactGroups(userA().id, anna.id)).toEqual([
       { id: family.id, name: "Семья" },
       { id: tennis.id, name: "Теннис" },
     ]);
@@ -61,7 +62,7 @@ describe("listContactGroups", () => {
     await createGroups("Семья");
     const anna = await createContactRow({ name: "Анна" });
 
-    expect(await listContactGroups(anna.id)).toEqual([]);
+    expect(await listContactGroups(userA().id, anna.id)).toEqual([]);
   });
 
   it("shows the new name after a group is renamed", async () => {
@@ -72,6 +73,6 @@ describe("listContactGroups", () => {
 
     await getDb().update(groups).set({ name: "Родные" }).where(eq(groups.id, family.id));
 
-    expect(await listContactGroups(anna.id)).toEqual([{ id: family.id, name: "Родные" }]);
+    expect(await listContactGroups(userA().id, anna.id)).toEqual([{ id: family.id, name: "Родные" }]);
   });
 });

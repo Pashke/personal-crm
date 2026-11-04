@@ -1,14 +1,19 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import { DAY_MS, daysAgo, msAgo } from "../tests/setup/helpers";
 
 import { resetData, seedContact } from "./support/db";
+import { expect, signIn, test } from "./support/sign-in";
 
 // openspec/specs/keep-in-touch/spec.md: the main paths through «Пора связаться».
 // The calculations and texts behind these screens are covered by the Vitest tests.
 
-test.beforeEach(async () => {
+// The signed-in user's address: the contacts below are seeded for them.
+let owner: string;
+
+test.beforeEach(async ({ page }) => {
   await resetData();
+  owner = await signIn(page);
 });
 
 const dueBlock = (page: Page) => page.getByRole("region", { name: "Пора связаться" });
@@ -42,7 +47,7 @@ test("frequency on the contact card: set, change, reset", async ({ page }) => {
   await page.goto("/contacts/new");
   await page.getByLabel("Имя").fill("Анна Соколова");
   await chooseFrequency(page, "Раз в месяц");
-  await page.locator("form button[type=submit]").click();
+  await page.getByRole("main").locator("form button[type=submit]").click();
   await page.getByRole("link", { name: "Анна Соколова" }).click();
   await expect(page.getByRole("heading", { name: "Анна Соколова" })).toBeVisible();
   await expect(frequencyLine(page)).toHaveText(/^Раз в месяц · следующий раз до \d{1,2} [а-я]+( \d{4})?$/);
@@ -51,7 +56,7 @@ test("frequency on the contact card: set, change, reset", async ({ page }) => {
   await page.getByRole("link", { name: "Изменить" }).click();
   await expect(page.getByRole("radio", { name: "Раз в месяц" })).toBeChecked();
   await chooseFrequency(page, "Раз в неделю");
-  await page.locator("form button[type=submit]").click();
+  await page.getByRole("main").locator("form button[type=submit]").click();
   await expect(frequencyLine(page)).toHaveText(
     `Раз в неделю · следующий раз до ${dayMonth(new Date(Date.now() + 7 * DAY_MS))}`,
   );
@@ -60,20 +65,20 @@ test("frequency on the contact card: set, change, reset", async ({ page }) => {
 
   // Сброс частоты, «Частота не задана»: a dash on the contact page
   await chooseFrequency(page, "Не задано");
-  await page.locator("form button[type=submit]").click();
+  await page.getByRole("main").locator("form button[type=submit]").click();
   await expect(page.getByRole("heading", { name: "Анна Соколова" })).toBeVisible();
   await expect(frequencyLine(page)).toHaveText("—");
 });
 
 test("got in touch: a quick note from the block", async ({ page }) => {
-  const anna = await seedContact({
+  const anna = await seedContact(owner, {
     name: "Анна Соколова",
     frequency: "week",
     createdAt: daysAgo(100),
     notes: [{ body: "Обсудили отпуск", createdAt: msAgo(19 * DAY_MS + 60 * 60 * 1000) }],
   });
-  const oleg = await seedContact({ name: "Олег Ким", frequency: "year", createdAt: daysAgo(400) });
-  await seedContact({ name: "Борис Иванов" });
+  const oleg = await seedContact(owner, { name: "Олег Ким", frequency: "year", createdAt: daysAgo(400) });
+  await seedContact(owner, { name: "Борис Иванов" });
 
   await page.goto("/");
 
@@ -127,14 +132,14 @@ test("got in touch: a quick note from the block", async ({ page }) => {
 });
 
 test("undo a quick note saved by mistake", async ({ page }) => {
-  await seedContact({ name: "Анна", frequency: "week", createdAt: daysAgo(40) });
-  const ivan = await seedContact({
+  await seedContact(owner, { name: "Анна", frequency: "week", createdAt: daysAgo(40) });
+  const ivan = await seedContact(owner, {
     name: "Иван",
     frequency: "week",
     createdAt: daysAgo(60),
     notes: [{ body: "Встретились на кофе", createdAt: daysAgo(20) }],
   });
-  await seedContact({ name: "Олег", frequency: "week", createdAt: daysAgo(10) });
+  await seedContact(owner, { name: "Олег", frequency: "week", createdAt: daysAgo(10) });
 
   await page.goto("/");
   // Сортировка по сроку; «Три и меньше»: all three are shown, no «Показать всех»
@@ -160,8 +165,8 @@ test("undo a quick note saved by mistake", async ({ page }) => {
 });
 
 test("changed my mind, or the note could not be saved", async ({ page, context }) => {
-  await seedContact({ name: "Анна", frequency: "week", createdAt: daysAgo(40) });
-  await seedContact({ name: "Иван", frequency: "week", createdAt: daysAgo(30) });
+  await seedContact(owner, { name: "Анна", frequency: "week", createdAt: daysAgo(40) });
+  await seedContact(owner, { name: "Иван", frequency: "week", createdAt: daysAgo(30) });
   await page.goto("/");
 
   // Отмена: the field closes, nothing is saved
@@ -205,8 +210,8 @@ test("changed my mind, or the note could not be saved", async ({ page, context }
 });
 
 test("Никому не пора: no block on the home page", async ({ page }) => {
-  await seedContact({ name: "Анна", frequency: "month" });
-  await seedContact({ name: "Иван", createdAt: daysAgo(400) });
+  await seedContact(owner, { name: "Анна", frequency: "month" });
+  await seedContact(owner, { name: "Иван", createdAt: daysAgo(400) });
 
   await page.goto("/");
 
@@ -218,9 +223,9 @@ test("a long block, and when it is hidden", async ({ page }) => {
   // Twelve due contacts: the further in the alphabet, the more overdue, so the order is the reverse one.
   const names = ["Алла", "Борис", "Вера", "Глеб", "Дина", "Егор", "Жанна", "Зоя", "Игорь", "Кира", "Лев", "Мария"];
   for (const [index, name] of names.entries()) {
-    await seedContact({ name, frequency: "week", createdAt: daysAgo(10 + index), groups: ["Семья"] });
+    await seedContact(owner, { name, frequency: "week", createdAt: daysAgo(10 + index), groups: ["Семья"] });
   }
-  await seedContact({ name: "Яна", frequency: "month", groups: ["Теннис"] });
+  await seedContact(owner, { name: "Яна", frequency: "month", groups: ["Теннис"] });
   const byDue = [...names].reverse();
   const rowsOf = (list: string[]) => list.map((name) => new RegExp(name));
 

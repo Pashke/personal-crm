@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { deleteGroup } from "@/app/groups/actions";
+import { deleteGroup } from "@/app/(app)/groups/actions";
 import { getDb } from "@/db";
 import { contacts, notes } from "@/db/schema";
 import { listContactGroups, listGroups } from "@/lib/groups";
 
+import { userA } from "./setup/current-user";
 import { addNoteRow, addToGroups, allGroups, createContactRow, createGroups } from "./setup/factories";
 
 describe("deleteGroup", () => {
@@ -24,9 +25,9 @@ describe("deleteGroup", () => {
     expect((await allGroups()).map((group) => group.name)).toEqual(["Семья", "Друзья", "Знакомые"]);
     expect(await getDb().select().from(contacts).orderBy(contacts.id)).toEqual(contactsBefore);
     expect(await getDb().select().from(notes).orderBy(notes.id)).toEqual(notesBefore);
-    expect(await listContactGroups(anna.id)).toEqual([{ id: family.id, name: "Семья" }]);
-    expect(await listContactGroups(ivan.id)).toEqual([{ id: friends.id, name: "Друзья" }]);
-    expect(await listGroups()).toEqual([
+    expect(await listContactGroups(userA().id, anna.id)).toEqual([{ id: family.id, name: "Семья" }]);
+    expect(await listContactGroups(userA().id, ivan.id)).toEqual([{ id: friends.id, name: "Друзья" }]);
+    expect(await listGroups(userA().id)).toEqual([
       { id: family.id, name: "Семья", contactCount: 1 },
       { id: friends.id, name: "Друзья", contactCount: 1 },
       expect.objectContaining({ name: "Знакомые", contactCount: 0 }),

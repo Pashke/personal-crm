@@ -6,6 +6,7 @@ import { contacts } from "@/db/schema";
 import { emptyContactValues } from "@/lib/contact-schema";
 import { getContact, listDueContacts } from "@/lib/contacts";
 
+import { userA } from "./setup/current-user";
 import { addNoteRow, contactRow, createContactRow } from "./setup/factories";
 import { DAY_MS, daysAgo, formDataOf, redirectTarget } from "./setup/helpers";
 
@@ -20,7 +21,7 @@ async function updateWith(id: number, fields: Record<string, string>) {
   return redirectTarget(() => updateContact(id, initial, formDataOf({ name: "Анна", ...fields })));
 }
 
-const dueNames = async () => (await listDueContacts()).map((row) => row.name);
+const dueNames = async () => (await listDueContacts(userA().id)).map((row) => row.name);
 
 describe("contact frequency in the contact form", () => {
   it("Новый контакт с частотой: saved with «Раз в месяц»", async () => {
@@ -60,12 +61,12 @@ describe("contact frequency in the contact form", () => {
 
     await updateWith(anna.id, { contactFrequency: "week" });
 
-    const [due] = await listDueContacts();
+    const [due] = await listDueContacts(userA().id);
     expect(due.name).toBe("Анна");
     expect(due.lastNoteAt).toEqual(note.createdAt);
     // The due date passed 13 days ago: 20 days since the note minus a week.
     expect(due.dueAt?.getTime()).toBe(note.createdAt.getTime() + 7 * DAY_MS);
-    expect((await getContact(anna.id))?.lastNoteAt).toEqual(note.createdAt);
+    expect((await getContact(userA().id, anna.id))?.lastNoteAt).toEqual(note.createdAt);
   });
 });
 

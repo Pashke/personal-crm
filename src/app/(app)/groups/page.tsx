@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
 
-import { deleteGroup, renameGroup } from "@/app/groups/actions";
+import { deleteGroup, renameGroup } from "@/app/(app)/groups/actions";
 import { BackLink } from "@/components/back-link";
 import { GroupRow } from "@/components/group-row";
 import { NewGroupForm } from "@/components/new-group-form";
 import { homeHref } from "@/lib/home-href";
 import { listGroups } from "@/lib/groups";
+import { requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Группы" };
 
 export default async function GroupsPage() {
-  const groups = await listGroups();
+  const user = await requireUser();
+  const groups = await listGroups(user.id);
 
   return (
     <div className="flex flex-col gap-5 md:gap-6">

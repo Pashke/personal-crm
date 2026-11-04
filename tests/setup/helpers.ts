@@ -13,6 +13,9 @@ export async function redirectTarget(run: () => Promise<unknown>): Promise<strin
   throw new Error("Expected the action to redirect, but it returned a result");
 }
 
+// The app address in Vitest: sign-in links in the caught emails lead here (BETTER_AUTH_URL).
+export const TEST_APP_URL = "http://localhost:3000";
+
 export const MINUTE_MS = 60 * 1000;
 export const DAY_MS = 24 * 60 * MINUTE_MS;
 
