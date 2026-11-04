@@ -5,11 +5,13 @@ import { BackLink } from "@/components/back-link";
 import { ContactForm } from "@/components/contact-form";
 import { emptyContactValues } from "@/lib/contact-schema";
 import { listGroups } from "@/lib/groups";
+import { requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Новый контакт" };
 
 export default async function NewContactPage() {
-  const groups = await listGroups();
+  const user = await requireUser();
+  const groups = await listGroups(user.id);
 
   return (
     <div className="flex flex-col gap-5 md:gap-6">

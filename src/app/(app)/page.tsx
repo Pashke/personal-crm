@@ -18,21 +18,23 @@ import {
 import { listGroups } from "@/lib/groups";
 import { homeHref } from "@/lib/home-href";
 import { resolveSelectedGroup } from "@/lib/selected-group";
+import { requireUser } from "@/lib/session";
 
 export default async function ContactsPage({ searchParams }: PageProps<"/">) {
+  const user = await requireUser();
   const { q, group, added, deleted } = await searchParams;
   const query = typeof q === "string" ? q.trim() : "";
   const addedId = typeof added === "string" ? Number(added) : null;
 
   // The groups come first: ?group= is checked against them (a deleted or made-up group means «Все»).
-  const groups = await listGroups();
+  const groups = await listGroups(user.id);
   const groupId = resolveSelectedGroup(group, groups);
   const selectedGroup = groups.find((item) => item.id === groupId) ?? null;
 
   const [items, total, due] = await Promise.all([
-    listContacts(query, groupId),
-    countContacts(),
-    listDueContactsForHome(query, groupId),
+    listContacts(user.id, query, groupId),
+    countContacts(user.id),
+    listDueContactsForHome(user.id, query, groupId),
   ]);
   const addedContact = addedId ? items.find((item) => item.id === addedId) : undefined;
 
@@ -134,9 +136,8 @@ function EmptyState({ text }: { text: string | null }) {
         <p>{text}</p>
       ) : (
         <p>
-          Пока нет ни одного контакта.{" "}
           <Link href="/contacts/new" className="text-accent underline underline-offset-4">
-            Добавьте первый
+            Добавь первый контакт
           </Link>
         </p>
       )}

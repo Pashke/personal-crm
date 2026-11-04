@@ -46,6 +46,9 @@ jobs:
     env:
       POSTGRES_USER: crm
       POSTGRES_DB: crm
+      # Sign-in emails go to the mail stub started below, never to real mailboxes.
+      # The owner of the test data is passed by the tests themselves (TEST_OWNER_EMAIL).
+      SMTP_URL: smtp://127.0.0.1:1025
     steps:
       - uses: actions/checkout@v7
 
@@ -58,14 +61,18 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Real Postgres from the same docker-compose.yml as on a developer machine. The password is
-      # random for each run, masked in the log and never stored anywhere.
-      - name: Start Postgres
+      # Real Postgres and the mail stub Mailpit from the same docker-compose.yml as on a developer
+      # machine. The database password and the sign-in secret are random for each run, masked
+      # in the log and never stored anywhere.
+      - name: Start Postgres and Mailpit
         run: |
           password="$(openssl rand -hex 16)"
           echo "::add-mask::$password"
           echo "POSTGRES_PASSWORD=$password" >> "$GITHUB_ENV"
-          POSTGRES_PASSWORD="$password" docker compose up -d --wait postgres
+          secret="$(openssl rand -base64 32)"
+          echo "::add-mask::$secret"
+          echo "BETTER_AUTH_SECRET=$secret" >> "$GITHUB_ENV"
+          POSTGRES_PASSWORD="$password" docker compose up -d --wait postgres mailpit
 
       - run: pnpm test
 

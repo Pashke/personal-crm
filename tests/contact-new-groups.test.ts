@@ -6,6 +6,7 @@ import { listContactGroups, listGroups } from "@/lib/groups";
 import { getDb } from "@/db";
 import { contacts } from "@/db/schema";
 
+import { userA } from "./setup/current-user";
 import { allGroups, createContactRow, createGroups, groupIdsOf } from "./setup/factories";
 import { formDataOf, redirectTarget } from "./setup/helpers";
 
@@ -23,9 +24,9 @@ describe("new groups from the contact form", () => {
 
     const id = await createWith({ newGroups: "Коллеги" });
 
-    const groups = await listGroups();
+    const groups = await listGroups(userA().id);
     expect(groups.map((group) => group.name)).toEqual([...defaultGroups, "Коллеги"]);
-    expect(await listContactGroups(id)).toEqual([{ id: groups[5].id, name: "Коллеги" }]);
+    expect(await listContactGroups(userA().id, id)).toEqual([{ id: groups[5].id, name: "Коллеги" }]);
   });
 
   it("Две новые группы: both are created and the contact is in both", async () => {
@@ -34,7 +35,7 @@ describe("new groups from the contact form", () => {
     const id = await createWith({ newGroups: ["Коллеги", "Соседи"] });
 
     expect((await allGroups()).map((group) => group.name)).toEqual([...defaultGroups, "Коллеги", "Соседи"]);
-    expect((await listContactGroups(id)).map((group) => group.name)).toEqual(["Коллеги", "Соседи"]);
+    expect((await listContactGroups(userA().id, id)).map((group) => group.name)).toEqual(["Коллеги", "Соседи"]);
   });
 
   it("Название существующей группы: no new group, the contact joins the existing one", async () => {
@@ -58,7 +59,7 @@ describe("new groups from the contact form", () => {
       ),
     );
 
-    expect((await listContactGroups(anna.id)).map((group) => group.name)).toEqual(["Семья", "Коллеги"]);
+    expect((await listContactGroups(userA().id, anna.id)).map((group) => group.name)).toEqual(["Семья", "Коллеги"]);
     expect(await allGroups()).toHaveLength(6);
   });
 

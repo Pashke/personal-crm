@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Caveat, Oswald, PT_Serif } from "next/font/google";
-import Link from "next/link";
 
 import { Toaster } from "@/components/ui/sonner";
 
@@ -23,8 +22,8 @@ export const metadata: Metadata = {
   description: "Контакты людей, которых я знаю лично",
 };
 
-const headerLinkClass = "font-display text-label font-medium text-accent uppercase hover:opacity-90";
-
+// The frame shared by every page. The header and <main> come from the layouts of the route groups:
+// (app) for the pages after signing in, (auth) for the sign-in pages.
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ru" className={`${oswald.variable} ${ptSerif.variable} ${caveat.variable} h-full`}>
@@ -32,15 +31,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* The landing's signature double "label" frame: a thick outer line and a thin inner one */}
         <div className="mx-auto flex w-full max-w-5xl flex-1 rounded-md border-2 border-accent p-1.25 md:rounded-lg md:p-1.5">
           <div className="flex min-w-0 flex-1 flex-col gap-7 rounded-xs border border-accent px-4.5 pt-4.5 pb-6 md:gap-10 md:rounded-sm md:px-frame-x md:py-frame-y">
-            <header className="flex items-baseline justify-between gap-4">
-              <Link href="/" className={headerLinkClass}>
-                Личная CRM
-              </Link>
-              <Link href="/groups" className={headerLinkClass}>
-                Группы
-              </Link>
-            </header>
-            <main className="flex-1">{children}</main>
+            {children}
           </div>
         </div>
         <Toaster position="top-center" theme="light" />

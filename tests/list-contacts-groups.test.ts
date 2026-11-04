@@ -5,10 +5,11 @@ import { getDb } from "@/db";
 import { groups } from "@/db/schema";
 import { listContacts } from "@/lib/contacts";
 
+import { userA } from "./setup/current-user";
 import { addToGroups, createContactRow, createGroups } from "./setup/factories";
 
 const names = async (query: string, groupId?: number | null) =>
-  (await listContacts(query, groupId)).map((contact) => contact.name);
+  (await listContacts(userA().id, query, groupId)).map((contact) => contact.name);
 
 let family: { id: number; name: string };
 let friends: { id: number; name: string };
@@ -65,7 +66,7 @@ describe("listContacts with a group", () => {
 
 describe("groups in the row", () => {
   const groupsOf = async (name: string) => {
-    const row = (await listContacts("")).find((contact) => contact.name === name);
+    const row = (await listContacts(userA().id, "")).find((contact) => contact.name === name);
     return row?.groups;
   };
 
@@ -84,7 +85,7 @@ describe("groups in the row", () => {
   });
 
   it("each row has its own groups when the list is filtered", async () => {
-    const rows = await listContacts("", tennis.id);
+    const rows = await listContacts(userA().id, "", tennis.id);
 
     expect(rows.map((row) => row.groups)).toEqual([["Друзья", "Теннис"], ["Теннис"]]);
   });

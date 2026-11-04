@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { renameGroup } from "@/app/groups/actions";
+import { renameGroup } from "@/app/(app)/groups/actions";
 import { listGroups } from "@/lib/groups";
 
+import { userA } from "./setup/current-user";
 import { addToGroups, allGroups, createContactRow, createGroups } from "./setup/factories";
 import { formDataOf } from "./setup/helpers";
 
@@ -19,7 +20,7 @@ describe("renameGroup", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.savedAt).toEqual(expect.any(Number));
-    expect(await listGroups()).toEqual([
+    expect(await listGroups(userA().id)).toEqual([
       ...created.slice(0, 4).map((group) => ({ ...group, contactCount: 0 })),
       { id: analytics.id, name: "Аналитика", contactCount: 1 },
     ]);

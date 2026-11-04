@@ -1,21 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { LoadError } from "@/components/load-error";
 
-import { Button } from "@/components/ui/button";
-
-export default function ErrorPage({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
-  useEffect(() => {
-    console.error("Page failed to render", error);
-  }, [error]);
-
+// A failure outside the pages after signing in: the sign-in pages, or the check of the user
+// in the (app) layout. It replaces the header too, so the error comes in a <main> of its own.
+export default function ErrorPage(props: { error: Error & { digest?: string }; retry: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-5 py-12 text-center md:gap-6">
-      <h1 className="font-display text-title font-bold text-balance uppercase">Не удалось загрузить данные</h1>
-      <p className="max-w-xl text-pretty text-muted-foreground">
-        Скорее всего, не запущена база данных. Запустите Docker Desktop и попробуйте ещё раз.
-      </p>
-      <Button onClick={() => retry()}>Попробовать снова</Button>
-    </div>
+    <main className="flex-1">
+      <LoadError {...props} />
+    </main>
   );
 }

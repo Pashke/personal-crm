@@ -3,8 +3,13 @@
 # or deploy/compose.sh (manual commands). They set the project name, the env file
 # and APP_IMAGE, the app image to run.
 #
-# Credentials come from /home/deploy/personal-crm/.env (mode 600):
-#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+# Settings come from /home/deploy/personal-crm/.env (mode 600), one line each:
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB - the database
+#   OWNER_EMAIL         - the owner of the data that existed before sign-in (migrations, demo data)
+#   BETTER_AUTH_SECRET  - signs the session cookies, a long random string
+#   SMTP_URL            - where sign-in emails go: smtps://resend:<Resend key>@smtp.resend.com:465
+# Every one of them is required: without a line any compose command stops at once, so a deploy
+# stops at its first step, before the backup, changing nothing.
 
 x-logging: &logging
   # Container logs are capped: 3 files of 10 MB per container.
@@ -18,13 +23,20 @@ x-db-credentials: &db-credentials
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set in .env}
   POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is not set in .env}
 
+x-app-env: &app-env
+  <<: *db-credentials
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+
+# Read by the migrations (the owner of existing data, drizzle/0005_*) and the demo data.
+x-owner-env: &owner-env
+  <<: *app-env
+  OWNER_EMAIL: ${OWNER_EMAIL:?OWNER_EMAIL is not set in .env}
+
 # Shared by the app and the one-off containers made from the same image.
 x-app-base: &app-base
   image: ${APP_IMAGE:?APP_IMAGE is not set, run this stack through deploy/deploy.sh or deploy/compose.sh}
-  environment:
-    <<: *db-credentials
-    POSTGRES_HOST: postgres
-    POSTGRES_PORT: "5432"
+  environment: *app-env
   depends_on:
     postgres:
       condition: service_healthy
@@ -48,6 +60,12 @@ services:
   app:
     <<: *app-base
     restart: unless-stopped
+    environment:
+      <<: *app-env
+      # The public address: sign-in links lead here; https makes the session cookies Secure.
+      BETTER_AUTH_URL: https://app.whobook.ru
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is not set in .env}
+      SMTP_URL: ${SMTP_URL:?SMTP_URL is not set in .env}
     # Only nginx on the same server reaches the app, the port is not open to the internet.
     ports:
       - "127.0.0.1:3000:3000"
@@ -63,12 +81,14 @@ services:
   migrate:
     <<: *app-base
     profiles: ["tools"]
+    environment: *owner-env
     command: ["drizzle-kit", "migrate"]
 
-  # One-off, by hand only: fills an empty database with test contacts.
+  # One-off, by hand only: demo contacts for the owner, if the owner has no contacts yet.
   seed:
     <<: *app-base
     profiles: ["tools"]
+    environment: *owner-env
     command: ["tsx", "scripts/seed.ts"]
 
 volumes:

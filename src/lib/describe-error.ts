@@ -21,11 +21,6 @@ export function describeError(error: unknown) {
   return chain;
 }
 
-// SQLSTATE 23503 foreign_key_violation, e.g. a note for a contact deleted in another tab.
-export function isForeignKeyViolation(error: unknown) {
-  return hasSqlState(error, "23503");
-}
-
 // SQLSTATE 23505 unique_violation, e.g. a group whose name is already taken.
 export function isUniqueViolation(error: unknown) {
   return hasSqlState(error, "23505");

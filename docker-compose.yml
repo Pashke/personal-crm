@@ -17,5 +17,21 @@ services:
       timeout: 5s
       retries: 10
 
+  # Mail stub for the computer and tests: catches every sign-in email instead of sending it.
+  # SMTP for the app is 127.0.0.1:1025, the page with the caught emails is http://localhost:8025.
+  # Emails live in memory until the container restarts.
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    restart: unless-stopped
+    ports:
+      # Localhost only, like the database
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres-data:

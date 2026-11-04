@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, exists, gt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect, RedirectType } from "next/navigation";
 import { z } from "zod";
@@ -18,11 +18,17 @@ import {
   type NoteFormState,
   type UndoContactLogResult,
 } from "@/lib/contact-schema";
-import { describeError, isForeignKeyViolation } from "@/lib/describe-error";
+import { describeError } from "@/lib/describe-error";
 import { isValidId, parseId } from "@/lib/ids";
 import { setContactGroups } from "@/lib/groups";
+import { requireUser } from "@/lib/session";
+
+// Every action first checks who is signed in (without a user it ends on the sign-in page) and then
+// touches only that user's records: the owner condition is part of each query, so the id of someone
+// else's contact gets the same answer as the id of one that does not exist.
 
 export async function createContact(_prevState: ContactFormState, formData: FormData): Promise<ContactFormState> {
+  const user = await requireUser();
   const values = readContactValues(formData);
   const parsed = contactSchema.safeParse(values);
   if (!parsed.success) {
@@ -33,8 +39,11 @@ export async function createContact(_prevState: ContactFormState, formData: Form
   try {
     // The contact and its groups are saved together: either both, or nothing.
     id = await getDb().transaction(async (tx) => {
-      const [row] = await tx.insert(contacts).values(toContactRow(parsed.data)).returning({ id: contacts.id });
-      await setContactGroups(tx, row.id, toGroupIds(parsed.data.groupIds), parsed.data.newGroups);
+      const [row] = await tx
+        .insert(contacts)
+        .values({ ...toContactRow(parsed.data), userId: user.id })
+        .returning({ id: contacts.id });
+      await setContactGroups(tx, user.id, row.id, toGroupIds(parsed.data.groupIds), parsed.data.newGroups);
       return row.id;
     });
   } catch (error) {
@@ -51,6 +60,7 @@ export async function updateContact(
   _prevState: ContactFormState,
   formData: FormData,
 ): Promise<ContactFormState> {
+  const user = await requireUser();
   const values = readContactValues(formData);
   if (!isValidId(id)) {
     return { values, message: "Контакт не найден." };
@@ -65,10 +75,10 @@ export async function updateContact(
       const updated = await tx
         .update(contacts)
         .set({ ...toContactRow(parsed.data), updatedAt: new Date() })
-        .where(eq(contacts.id, id))
+        .where(and(eq(contacts.id, id), eq(contacts.userId, user.id)))
         .returning({ id: contacts.id });
       if (updated.length === 0) return false;
-      await setContactGroups(tx, id, toGroupIds(parsed.data.groupIds), parsed.data.newGroups);
+      await setContactGroups(tx, user.id, id, toGroupIds(parsed.data.groupIds), parsed.data.newGroups);
       return true;
     });
     if (!found) {
@@ -85,14 +95,18 @@ export async function updateContact(
 }
 
 export async function deleteContact(id: number): Promise<DeleteContactState> {
+  const user = await requireUser();
   if (!isValidId(id)) {
     return { error: "Контакт не найден." };
   }
 
   try {
     // Notes go with the contact: notes.contact_id is ON DELETE CASCADE.
-    // Zero deleted rows means another tab got there first, which ends the same way.
-    await getDb().delete(contacts).where(eq(contacts.id, id));
+    // Zero deleted rows means another tab got there first (or the contact is someone else's),
+    // which ends the same way.
+    await getDb()
+      .delete(contacts)
+      .where(and(eq(contacts.id, id), eq(contacts.userId, user.id)));
   } catch (error) {
     console.error("Failed to delete contact", { id, error: describeError(error) });
     return { error: "Не удалось удалить контакт. Попробуйте ещё раз." };
@@ -110,6 +124,7 @@ export async function addNote(
   _prevState: NoteFormState,
   formData: FormData,
 ): Promise<NoteFormState> {
+  const user = await requireUser();
   const body = String(formData.get("body") ?? "");
   if (!isValidId(contactId)) {
     return { body, error: "Контакт не найден." };
@@ -120,11 +135,11 @@ export async function addNote(
   }
 
   try {
-    await getDb().insert(notes).values({ contactId, body: parsed.data.body });
-  } catch (error) {
-    if (isForeignKeyViolation(error)) {
+    const noteId = await insertNote(user.id, contactId, parsed.data.body);
+    if (noteId === null) {
       return { body, error: "Контакт не найден — возможно, его удалили." };
     }
+  } catch (error) {
     console.error("Failed to add note", { contactId, error: describeError(error) });
     return { body, error: "Не удалось сохранить заметку. Попробуйте ещё раз." };
   }
@@ -141,6 +156,7 @@ const EMPTY_QUICK_NOTE = "Связались";
 // A quick note from the «Пора связаться» block: a regular note, saved at this moment.
 // Returns the note's id so the user can undo it right away.
 export async function logContact(contactId: number, body: string): Promise<LogContactResult> {
+  const user = await requireUser();
   if (!isValidId(contactId)) {
     return { error: "Контакт не найден." };
   }
@@ -152,21 +168,36 @@ export async function logContact(contactId: number, body: string): Promise<LogCo
     return { error: parsed.error.issues[0]?.message ?? "Проверьте текст заметки" };
   }
 
-  let noteId: number;
+  let noteId: number | null;
   try {
-    const [row] = await getDb().insert(notes).values({ contactId, body: parsed.data.body }).returning({ id: notes.id });
-    noteId = row.id;
+    noteId = await insertNote(user.id, contactId, parsed.data.body);
   } catch (error) {
-    if (isForeignKeyViolation(error)) {
-      return { error: "Контакт не найден — возможно, его удалили." };
-    }
     console.error("Failed to log contact", { contactId, error: describeError(error) });
     return { error: "Не удалось сохранить заметку. Попробуйте ещё раз." };
+  }
+  if (noteId === null) {
+    return { error: "Контакт не найден — возможно, его удалили." };
   }
 
   revalidatePath("/");
   revalidatePath(`/contacts/${contactId}`);
   return { noteId };
+}
+
+// A note for a contact of the user. The contact is checked and locked against a delete in the same
+// transaction, so a note never lands at someone else's contact or at one deleted a moment ago.
+// Returns the note's id, or null when the user has no such contact.
+async function insertNote(userId: string, contactId: number, body: string) {
+  return getDb().transaction(async (tx) => {
+    const [contact] = await tx
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(and(eq(contacts.id, contactId), eq(contacts.userId, userId)))
+      .for("share");
+    if (!contact) return null;
+    const [row] = await tx.insert(notes).values({ contactId, body }).returning({ id: notes.id });
+    return row.id;
+  });
 }
 
 // How long after a quick note «Отменить» still works on the server. The notice shows the
@@ -176,6 +207,7 @@ const UNDO_WINDOW_SECONDS = 60;
 // «Отменить» after a quick note. Deletes only that note and only while it is fresh,
 // so older notes can be deleted neither by a button nor by a forged request.
 export async function undoContactLog(noteId: number): Promise<UndoContactLogResult> {
+  const user = await requireUser();
   if (!isValidId(noteId)) {
     return { error: "Отменить уже нельзя" };
   }
@@ -184,7 +216,18 @@ export async function undoContactLog(noteId: number): Promise<UndoContactLogResu
   try {
     deleted = await getDb()
       .delete(notes)
-      .where(and(eq(notes.id, noteId), gt(notes.createdAt, sql`now() - make_interval(secs => ${UNDO_WINDOW_SECONDS})`)))
+      .where(
+        and(
+          eq(notes.id, noteId),
+          gt(notes.createdAt, sql`now() - make_interval(secs => ${UNDO_WINDOW_SECONDS})`),
+          exists(
+            getDb()
+              .select({ one: sql`1` })
+              .from(contacts)
+              .where(and(eq(contacts.id, notes.contactId), eq(contacts.userId, user.id))),
+          ),
+        ),
+      )
       .returning({ contactId: notes.contactId });
   } catch (error) {
     console.error("Failed to undo contact log", { noteId, error: describeError(error) });

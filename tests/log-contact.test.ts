@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import { logContact, undoContactLog } from "@/app/actions";
 import { getContact, listDueContacts } from "@/lib/contacts";
 
+import { userA } from "./setup/current-user";
 import { addNoteRow, createContactRow, notesOf } from "./setup/factories";
 import { DAY_MS, MINUTE_MS, daysAgo, msAgo } from "./setup/helpers";
 
-const dueNames = async () => (await listDueContacts()).map((row) => row.name);
+const dueNames = async () => (await listDueContacts(userA().id)).map((row) => row.name);
 
 // Three overdue contacts, the most overdue first: Анна, Иван, Олег.
 async function threeDue() {
@@ -33,7 +34,7 @@ describe("a quick note from «Пора связаться»", () => {
     const notes = await notesOf(ivan.id);
     expect(notes.at(-1)).toMatchObject({ id: noteId, body: "Созвонились, договорились о встрече" });
     expect(await dueNames()).toEqual(["Анна", "Олег"]);
-    const contact = (await getContact(ivan.id))!;
+    const contact = (await getContact(userA().id, ivan.id))!;
     expect(contact.lastNoteAt).toEqual(notes.at(-1)!.createdAt);
     expect(contact.dueAt!.getTime()).toBe(contact.lastNoteAt!.getTime() + 7 * DAY_MS);
   });
@@ -79,7 +80,7 @@ describe("«Отменить» after a quick note", () => {
     expect((await notesOf(ivan.id)).map((note) => note.id)).not.toContain(noteId);
     expect(await dueNames()).toEqual(["Анна", "Иван", "Олег"]);
     // The due date counts from the previous note again.
-    expect((await getContact(ivan.id))!.lastNoteAt!.getTime()).toBeLessThan(Date.now() - 19 * DAY_MS);
+    expect((await getContact(userA().id, ivan.id))!.lastNoteAt!.getTime()).toBeLessThan(Date.now() - 19 * DAY_MS);
   });
 
   it("Другие заметки не трогаются: only the quick note is deleted", async () => {
