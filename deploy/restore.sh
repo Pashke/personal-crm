@@ -15,6 +15,8 @@
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 trap 'printf "\nERROR: command failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
+# Prod only. The test stand database is recreated with refresh-staging-db.sh.
+use_env prod
 
 [ $# -eq 1 ] || die "usage: restore.sh <backup file>"
 [ -t 0 ] || die "restore waits for you to type \"yes\": run it in a terminal, with ssh -t"

@@ -1,45 +1,67 @@
 #!/usr/bin/env bash
-# Deploys one version of the app on the server, as user "deploy":
-#   database backup -> image -> migrations (one-off container) -> new app container -> smoke /health -> cleanup.
-# GitHub Actions calls it through deploy/ci-deploy.sh on every push to main.
+# Deploys one version of the app to one environment on the server, as user "deploy":
+#   prod:    database backup -> image -> migrations (one-off container) -> new app container -> smoke /health
+#            -> cleanup of images no environment needs;
+#   staging: (database still empty: load a copy of the newest prod backup) -> image -> migrations
+#            -> new app container -> smoke /health. No backup.
+# GitHub Actions calls it through deploy/ci-deploy.sh on every push to main, for each environment.
 # It can also be run by hand with an older version: that is how rollback.sh works.
 #
-# Usage: deploy.sh <git-commit-sha> [registry-user]
+# Usage: deploy.sh <prod|staging> <git-commit-sha> [registry-user]
 #   If the image is not on the server yet, a GHCR token is read from stdin to pull it.
 #
 # Any failure stops the script with a non-zero exit code. There is no automatic rollback:
 #   - backup failed     -> nothing was changed, the old version keeps running;
 #   - migrations failed -> the new version is not started, the old one keeps running;
-#   - smoke failed      -> the new version is already started; roll back by hand (rollback.sh).
-# The database can be put back from the backup by hand only, with restore.sh.
+#   - smoke failed      -> the new version is already started; roll back by hand
+#                          (prod: rollback.sh; staging: deploy.sh staging <older sha>).
+# The prod database can be put back from a backup by hand only, with restore.sh.
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 trap 'printf "\nERROR: command failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
-TAG="${1:-}"
-REGISTRY_USER="${2:-deploy}"
-is_sha "$TAG" || die "usage: deploy.sh <full 40-character git commit sha> [registry-user]"
+usage="usage: deploy.sh <prod|staging> <full 40-character git commit sha> [registry-user]"
+[ $# -ge 2 ] || die "$usage"
+use_env "$1"
+TAG="$2"
+REGISTRY_USER="${3:-deploy}"
+is_sha "$TAG" || die "$usage"
 IMAGE="$IMAGE_REPO:$TAG"
 
-# One deploy at a time: a manual run waits for a running CI deploy and vice versa.
-# restore.sh takes the same lock, so a deploy also waits for a running restore.
-mkdir -p "$STATE_DIR"
-exec 9>"$STATE_DIR/deploy.lock"
-flock -w 600 9 || die "another deploy or a restore has been running for 10 minutes, giving up"
+# One deploy at a time per environment. restore.sh and refresh-staging-db.sh take the same lock,
+# so a deploy also waits for them.
+wait_for_lock
 
-log "Deploying $TAG"
+log "Deploying $TAG to $ENV_NAME ($APP_URL)"
 check_env_file
 # compose needs the app image name even for commands that only touch postgres.
 # Starting postgres does not pull the app image.
 export APP_IMAGE="$IMAGE"
 
-# ---------------------------------------------------------------- database backup
-before="$(current_app_version)"
-log "Database backup (app version before this deploy: ${before:-none})"
+# ---------------------------------------------------------------- database
 # stdin may hold the GHCR token for the image step below: nothing here may read it.
-compose up --detach --wait postgres < /dev/null
-backup_db deploy "${before:-none}"
-prune_deploy_backups
+if [ "$ENV_NAME" = prod ]; then
+  before="$(current_app_version)"
+  log "Database backup (app version before this deploy: ${before:-none})"
+  compose up --detach --wait postgres < /dev/null
+  backup_db deploy "${before:-none}"
+  prune_deploy_backups
+else
+  log "Database (no backup on the test stand)"
+  compose up --detach --wait postgres < /dev/null
+  if db_is_empty; then
+    # A new test stand, or its database volume was deleted: it gets a copy of prod.
+    # Nothing is deleted here, the database is empty.
+    backup="$(latest_prod_backup)"
+    [ -n "$backup" ] || die "the $ENV_NAME database is empty and there is no prod backup in $BACKUP_DIR to copy into it"
+    info "the database is empty: loading a copy of the newest prod backup ${backup##*/}"
+    check_backup "$backup" || die "$backup is damaged and was not loaded. Nothing was changed"
+    load_backup "$backup"
+    info "loaded"
+  else
+    info "keeps its data. A fresh copy of prod: refresh-staging-db.sh (see README)"
+  fi
+fi
 
 # ---------------------------------------------------------------- image
 log "Image $IMAGE"
@@ -78,7 +100,7 @@ info "app container runs $running"
 log "Smoke test: GET /health"
 if ! check_health; then
   compose logs --tail 50 app || true
-  die "smoke test failed: version $TAG is running but /health does not answer 200. Nothing was rolled back"
+  die "smoke test failed: version $TAG is running on $ENV_NAME but /health does not answer 200. Nothing was rolled back"
 fi
 
 # ---------------------------------------------------------------- record versions
@@ -88,20 +110,15 @@ if [ "$current" != "$TAG" ]; then
   printf '%s\n' "$TAG" > "$CURRENT_FILE"
 fi
 previous="$(read_version "$PREVIOUS_FILE")"
-log "Versions"
+log "Versions on $ENV_NAME"
 info "current:  $TAG"
 info "previous: ${previous:-none}"
 
 # ---------------------------------------------------------------- cleanup
-# Keep only the images of the current and the previous version, so the disk does not fill up.
-# Only this app's images are touched.
-log "Cleanup: keeping only the current and the previous image"
-while read -r tag; do
-  if is_sha "$tag" && [ "$tag" != "$TAG" ] && [ "$tag" != "$previous" ]; then
-    docker image rm "$IMAGE_REPO:$tag" >/dev/null
-    info "removed $IMAGE_REPO:$tag"
-  fi
-done < <(docker image ls "$IMAGE_REPO" --format '{{.Tag}}')
-docker image ls "$IMAGE_REPO" --format '    kept {{.Repository}}:{{.Tag}} ({{.Size}})'
+# Prod and the test stand share the images. Only a prod deploy cleans up, so the disk does not fill up.
+if [ "$ENV_NAME" = prod ]; then
+  log "Cleanup: images no environment needs"
+  prune_images
+fi
 
-log "DEPLOYED $TAG"
+log "DEPLOYED $TAG to $ENV_NAME"

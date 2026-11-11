@@ -3,20 +3,29 @@
 #   Docker (container ports only on 127.0.0.1, log size limits),
 #   user "deploy" that runs the app containers (GitHub Actions logs in as this user),
 #   nginx: a stub page for the landing, the app proxied to its container,
-#   one HTTPS certificate for both domains (certbot, renewal by systemd timer).
+#   the test stand proxied to its container, behind a login and password (basic auth),
+#   HTTPS certificates (certbot, renewal by systemd timer): one for the landing and the app,
+#   a separate one for the test stand.
 # Safe to run again: finished steps are skipped, files not created by this script are not touched.
 #
-# Usage (as root): bash setup.sh <letsencrypt-email>
+# Usage (as root, in a terminal: without a test stand password yet, it asks for one):
+#   bash setup.sh <letsencrypt-email>
 # SSH keys for user deploy are taken from deploy-authorized_keys next to this script
 # (uploaded separately, not stored in git). Without that file existing keys are kept.
 set -Eeuo pipefail
 
 LANDING_DOMAIN="whobook.ru"
 APP_DOMAIN="app.whobook.ru"
+STAGING_DOMAIN="test-app.whobook.ru"
 DEPLOY_USER="deploy"
 DEPLOY_HOME="/home/$DEPLOY_USER"
 APP_DIR="$DEPLOY_HOME/personal-crm"
+# Certificate of the landing and the app.
 CERT_NAME="whobook.ru"
+# Certificate of the test stand, separate: getting or renewing it never touches the one above.
+STAGING_CERT_NAME="test-app.whobook.ru"
+# Login and password of the test stand, written by staging-password.sh.
+STAGING_HTPASSWD="/etc/nginx/whobook-test-app.htpasswd"
 EXPECTED_IP="153.76.175.142"
 ACME_ROOT="/var/www/letsencrypt"
 # Files that carry this marker belong to this script and may be overwritten by it.
@@ -46,13 +55,52 @@ install_managed() {
 
 is_managed() { [ -f "$1" ] && grep -qF "$MARKER" "$1"; }
 
+# Gets a certificate for the given domains if it does not exist yet.
+# The HTTPS sites need the certificate to start, so meanwhile nginx serves only
+# the Let's Encrypt check over HTTP for these domains.
+#   get_certificate <cert name> <domain>...
+get_certificate() {
+  local name=$1; shift
+  local bootstrap=/etc/nginx/sites-available/whobook-bootstrap.conf
+  local domain args=()
+  if [ -f "/etc/letsencrypt/live/$name/fullchain.pem" ]; then
+    info "certificate $name already exists"
+    return 0
+  fi
+  log "Getting the certificate $name for $*"
+  cat > "$bootstrap" <<EOF
+# $MARKER
+# Temporary: used only until the certificate exists. Serves the Let's Encrypt check over HTTP.
+server {
+    listen 80;
+    server_name $*;
+    include snippets/whobook-acme.conf;
+
+    location / {
+        return 503;
+    }
+}
+EOF
+  ln -sfn "$bootstrap" /etc/nginx/sites-enabled/whobook-bootstrap.conf
+  nginx -t -q
+  systemctl reload nginx
+
+  for domain in "$@"; do args+=(-d "$domain"); done
+  certbot certonly --webroot -w "$ACME_ROOT" --cert-name "$name" "${args[@]}" \
+    --email "$EMAIL" --agree-tos --no-eff-email --non-interactive
+
+  rm -f /etc/nginx/sites-enabled/whobook-bootstrap.conf "$bootstrap"
+  nginx -t -q
+  systemctl reload nginx
+}
+
 # ---------------------------------------------------------------- checks
 [ "$(id -u)" -eq 0 ] || die "run as root: sudo bash $0 <letsencrypt-email>"
 [ -n "$EMAIL" ] || die "usage: sudo bash $0 <letsencrypt-email>"
 case "$EMAIL" in *?@?*.?*) ;; *) die "not an email address: $EMAIL" ;; esac
 
 log "DNS"
-for d in "$LANDING_DOMAIN" "$APP_DOMAIN"; do
+for d in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN"; do
   ips=$(getent ahostsv4 "$d" | awk '{print $1}' | sort -u | xargs || true)
   [ "$ips" = "$EXPECTED_IP" ] || die "$d resolves to '$ips', expected $EXPECTED_IP. Fix the DNS A record first."
   info "$d -> $ips"
@@ -161,7 +209,7 @@ else
   info "added $DEPLOY_USER to the docker group"
 fi
 
-install -d -m 0700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$DEPLOY_HOME/.ssh" "$APP_DIR"
+install -d -m 0700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$DEPLOY_HOME/.ssh" "$APP_DIR" "$APP_DIR-staging"
 if [ -f "$SRC_DIR/deploy-authorized_keys" ]; then
   install -m 0600 -o "$DEPLOY_USER" -g "$DEPLOY_USER" \
     "$SRC_DIR/deploy-authorized_keys" "$DEPLOY_HOME/.ssh/authorized_keys"
@@ -173,6 +221,7 @@ else
   die "no SSH keys for $DEPLOY_USER: put deploy-authorized_keys next to this script and run it again"
 fi
 info "app folder: $APP_DIR (database credentials go to $APP_DIR/.env, mode 600)"
+info "test stand folder: $APP_DIR-staging (its own $APP_DIR-staging/.env, mode 600)"
 
 # ---------------------------------------------------------------- nginx
 log "nginx"
@@ -194,19 +243,32 @@ fi
 install -d -m 0755 /etc/nginx/snippets "$ACME_ROOT"
 install_managed "$SRC_DIR/nginx/snippets/whobook-acme.conf" /etc/nginx/snippets/whobook-acme.conf
 install_managed "$SRC_DIR/nginx/snippets/whobook-ssl.conf" /etc/nginx/snippets/whobook-ssl.conf
+install_managed "$SRC_DIR/nginx/snippets/whobook-test-app-ssl.conf" /etc/nginx/snippets/whobook-test-app-ssl.conf
 install_managed "$SRC_DIR/nginx/sites/00-default.conf" /etc/nginx/sites-available/00-default.conf
 is_managed /etc/nginx/sites-available/00-default.conf \
   && ln -sfn /etc/nginx/sites-available/00-default.conf /etc/nginx/sites-enabled/00-default.conf
 
-for site in "$LANDING_DOMAIN" "$APP_DOMAIN"; do
+# Site configs go to sites-available; they are enabled after the certificates exist (below).
+# Stub pages: whatever is in stubs/<domain>/ (the landing and the app: index.html; the app
+# and the test stand: unavailable.html, shown while the app container is down).
+for site in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN"; do
   install_managed "$SRC_DIR/nginx/sites/$site.conf" "/etc/nginx/sites-available/$site.conf"
   install -d -m 0755 "/var/www/$site"
-  install_managed "$SRC_DIR/stubs/$site/index.html" "/var/www/$site/index.html"
+  for stub in "$SRC_DIR/stubs/$site"/*; do
+    install_managed "$stub" "/var/www/$site/$(basename "$stub")"
+  done
 done
-install_managed "$SRC_DIR/stubs/$APP_DOMAIN/unavailable.html" "/var/www/$APP_DOMAIN/unavailable.html"
 
 nginx -t -q
 systemctl reload nginx
+
+# ---------------------------------------------------------------- test stand password
+log "Test stand password"
+if [ -s "$STAGING_HTPASSWD" ]; then
+  info "already set in $STAGING_HTPASSWD. To change it: sudo bash $SRC_DIR/staging-password.sh"
+else
+  bash "$SRC_DIR/staging-password.sh"
+fi
 
 # ---------------------------------------------------------------- certificate
 log "certbot"
@@ -219,24 +281,13 @@ fi
 install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
 install -m 0755 "$SRC_DIR/certbot/reload-nginx.sh" /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
 
-if [ ! -f "/etc/letsencrypt/live/$CERT_NAME/fullchain.pem" ]; then
-  log "Getting the certificate for $LANDING_DOMAIN and $APP_DOMAIN"
-  # The HTTPS sites need the certificate to start, so first serve only the Let's Encrypt check over HTTP.
-  install -m 0644 "$SRC_DIR/nginx/bootstrap.conf" /etc/nginx/sites-available/whobook-bootstrap.conf
-  ln -sfn /etc/nginx/sites-available/whobook-bootstrap.conf /etc/nginx/sites-enabled/whobook-bootstrap.conf
-  nginx -t -q
-  systemctl reload nginx
-
-  certbot certonly --webroot -w "$ACME_ROOT" \
-    --cert-name "$CERT_NAME" -d "$LANDING_DOMAIN" -d "$APP_DOMAIN" \
-    --email "$EMAIL" --agree-tos --no-eff-email --non-interactive
-else
-  info "certificate $CERT_NAME already exists"
-fi
+get_certificate "$CERT_NAME" "$LANDING_DOMAIN" "$APP_DOMAIN"
+get_certificate "$STAGING_CERT_NAME" "$STAGING_DOMAIN"
+# Left over if an earlier run stopped while getting a certificate.
 rm -f /etc/nginx/sites-enabled/whobook-bootstrap.conf /etc/nginx/sites-available/whobook-bootstrap.conf
 
 log "Enabling HTTPS sites"
-for site in "$LANDING_DOMAIN" "$APP_DOMAIN"; do
+for site in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN"; do
   if is_managed "/etc/nginx/sites-available/$site.conf"; then
     ln -sfn "/etc/nginx/sites-available/$site.conf" "/etc/nginx/sites-enabled/$site.conf"
     info "enabled $site"
@@ -250,8 +301,10 @@ systemctl reload nginx
 log "Renewal"
 systemctl enable --now certbot.timer >/dev/null 2>&1
 systemctl list-timers certbot.timer --no-pager || true
-certbot renew --dry-run --cert-name "$CERT_NAME" -q
-info "renewal dry run: OK"
+for name in "$CERT_NAME" "$STAGING_CERT_NAME"; do
+  certbot renew --dry-run --cert-name "$name" -q
+  info "renewal dry run of $name: OK"
+done
 
 # ---------------------------------------------------------------- summary
 log "Summary"
@@ -259,11 +312,16 @@ info "docker:  $(docker --version)"
 info "compose: $(docker compose version --short)"
 info "nginx:   $(nginx -v 2>&1)"
 info "certbot: $(certbot --version 2>&1)"
-certbot certificates --cert-name "$CERT_NAME" 2>/dev/null | grep -E 'Domains|Expiry' | sed 's/^ */    /' || true
-for d in "$LANDING_DOMAIN" "$APP_DOMAIN"; do
+for name in "$CERT_NAME" "$STAGING_CERT_NAME"; do
+  certbot certificates --cert-name "$name" 2>/dev/null | grep -E 'Domains|Expiry' | sed 's/^ */    /' || true
+done
+for d in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN"; do
   http=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --resolve "$d:80:127.0.0.1" "http://$d/" || true)
   https=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$d:443:127.0.0.1" "https://$d/" || true)
   info "$d: http -> $http | https -> $https"
 done
+# The server itself passes without a password; through the public address a password is needed.
+public=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$STAGING_DOMAIN:443:$EXPECTED_IP" "https://$STAGING_DOMAIN/" || true)
+info "$STAGING_DOMAIN via $EXPECTED_IP without a password: $public (expected 401)"
 echo
 echo "DONE"
