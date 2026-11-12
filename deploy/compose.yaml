@@ -2,6 +2,7 @@
 # (the test stand). Do not run docker compose on this file directly: use deploy/deploy.sh (deploys a version)
 # or deploy/compose.sh (manual commands). They pick the environment (use_env in deploy/lib.sh) and set
 # the project name, the env file, APP_URL, APP_PORT, the memory limits and APP_IMAGE, the app image to run.
+# Logs of the containers: deploy/logs.sh.
 #
 # Secrets come from the .env of the environment (mode 600): /home/deploy/personal-crm/.env for prod,
 # /home/deploy/personal-crm-staging/.env for the test stand. One line each:
@@ -13,11 +14,17 @@
 # stops at its first step, before the backup, changing nothing.
 
 x-logging: &logging
-  # Container logs are capped: 3 files of 10 MB per container.
-  driver: json-file
+  # Container logs go to the server journal (journald), not to files of the container: they stay after
+  # the container is replaced (deploy, rollback, restore, restart). journald limits the size of the whole
+  # journal itself and deletes the oldest lines. Read them with deploy/logs.sh.
+  driver: journald
   options:
-    max-size: "10m"
-    max-file: "3"
+    # The name of each journal line: the container name (prod-app-1, staging-postgres-1, prod-migrate-run-...).
+    # deploy/server-setup/rsyslog/10-personal-crm.conf keeps lines with these names out of /var/log/syslog.
+    tag: "{{.Name}}"
+    # Journal fields COM_DOCKER_COMPOSE_PROJECT (prod or staging) and COM_DOCKER_COMPOSE_SERVICE
+    # (app, postgres, migrate, seed). They do not change when a container is replaced: logs.sh filters by them.
+    labels: "com.docker.compose.project,com.docker.compose.service"
 
 x-db-credentials: &db-credentials
   POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is not set in .env}

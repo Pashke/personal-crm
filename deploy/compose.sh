@@ -5,7 +5,8 @@
 # Usage: compose.sh <prod|staging> <docker compose arguments>
 # Examples:
 #   compose.sh prod ps                         - containers of prod and their state
-#   compose.sh staging logs --tail 100 app     - recent app logs of the test stand
+#   compose.sh staging logs --tail 100 app     - recent logs of the current app container of the test stand
+#                                                (lines of replaced containers too: logs.sh)
 #   compose.sh prod run --rm seed              - fill an empty database with test contacts
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
