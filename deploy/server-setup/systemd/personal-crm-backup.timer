@@ -1,0 +1,13 @@
+# managed-by: personal-crm deploy/server-setup
+# Runs personal-crm-backup.service every day at 03:00 Moscow time.
+# Next run: systemctl list-timers personal-crm-backup.timer
+[Unit]
+Description=personal-crm: daily backup of the prod database at 03:00 Moscow time
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Europe/Moscow
+# If the server was off at 03:00, the backup runs right after it starts.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

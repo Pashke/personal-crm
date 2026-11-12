@@ -5,7 +5,8 @@
 #   nginx: a stub page for the landing, the app proxied to its container,
 #   the test stand proxied to its container, behind a login and password (basic auth),
 #   HTTPS certificates (certbot, renewal by systemd timer): one for the landing and the app,
-#   a separate one for the test stand.
+#   a separate one for the test stand,
+#   the daily backup of the prod database at 03:00 Moscow time (systemd timer personal-crm-backup.timer).
 # Safe to run again: finished steps are skipped, files not created by this script are not touched.
 #
 # Usage (as root, in a terminal: without a test stand password yet, it asks for one):
@@ -305,6 +306,26 @@ for name in "$CERT_NAME" "$STAGING_CERT_NAME"; do
   certbot renew --dry-run --cert-name "$name" -q
   info "renewal dry run of $name: OK"
 done
+
+# ---------------------------------------------------------------- daily database backup
+# The timer starts deploy/backup.sh as user deploy every day at 03:00 Moscow time.
+# The script itself is not installed here: it comes with every prod deploy (Deploy prod copies deploy/).
+log "Daily database backup"
+for unit in personal-crm-backup.service personal-crm-backup.timer; do
+  install_managed "$SRC_DIR/systemd/$unit" "/etc/systemd/system/$unit"
+done
+systemctl daemon-reload
+if is_managed /etc/systemd/system/personal-crm-backup.service && is_managed /etc/systemd/system/personal-crm-backup.timer; then
+  systemctl enable --now personal-crm-backup.timer
+  info "timer enabled"
+else
+  info "SKIP the timer: its files were not created by this script"
+fi
+systemctl list-timers personal-crm-backup.timer --no-pager || true
+if [ ! -f "$APP_DIR/deploy/backup.sh" ]; then
+  info "$APP_DIR/deploy/backup.sh is not on the server yet: it comes with the next Deploy prod."
+  info "Until then the daily backup fails."
+fi
 
 # ---------------------------------------------------------------- summary
 log "Summary"
