@@ -42,4 +42,6 @@ esac
 id -nG | tr ' ' '\n' | grep -qx systemd-journal \
   || die "user $(id -un) cannot read the server journal: it is not in group systemd-journal. Run deploy/server-setup/setup.sh (see README, \"Логи\")"
 
-exec journalctl --no-hostname "${match[@]}" "$@"
+# --all: show every line as it is. Without it journalctl hides lines with terminal control codes as
+# "[74B blob data]", and such a line can matter: the migrations print their result with colors and a spinner.
+exec journalctl --no-hostname --all "${match[@]}" "$@"
