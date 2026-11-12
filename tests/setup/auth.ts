@@ -8,8 +8,9 @@ import { formDataOf } from "./helpers";
 import { emailsTo } from "./mail-trap";
 import { signInLinkOf } from "./mailpit";
 
-// The session cookie as Better Auth names it on an http address (tests run without https).
-export const SESSION_COOKIE = "better-auth.session_token";
+// The session cookie as the app names it on an http address (tests run without https), see
+// cookiePrefix in src/lib/create-auth.ts.
+export const SESSION_COOKIE = "crm.session_token";
 
 // «Получить ссылку» for the address; returns the link from the email it sent.
 export async function requestLink(address: string) {

@@ -11,7 +11,7 @@ import { signInLinkOf } from "./setup/mailpit";
 // openspec user-auth: what the link from the email does. The links are opened through Better Auth's
 // real HTTP handler, on the test database.
 
-const signedIn = (path = "/") => ({ path, sessionCookie: expect.stringMatching(/^better-auth\.session_token=.+/) });
+const signedIn = (path = "/") => ({ path, sessionCookie: expect.stringMatching(/^crm\.session_token=.+/) });
 const expired = { path: "/login/expired", sessionCookie: null };
 
 async function userWith(email: string) {

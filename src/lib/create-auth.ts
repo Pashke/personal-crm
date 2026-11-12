@@ -47,6 +47,9 @@ export function createAuth(db: AuthDb, { nextCookies: withNextCookies = true }: 
     // and the session service paths.
     disabledPaths: ["/sign-in/magic-link"],
     advanced: {
+      // Cookies named after the app, not the library ("better-auth.session_token" by default):
+      // the app does not name its software.
+      cookiePrefix: "crm",
       // The visitor's address, for Better Auth's own per-IP request limits: nginx on the server
       // puts it into X-Real-IP.
       ipAddress: { ipAddressHeaders: ["x-real-ip"] },
