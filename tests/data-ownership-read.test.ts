@@ -7,6 +7,7 @@ import {
   listDueContacts,
   listDueContactsForHome,
   listNotes,
+  listUpcomingBirthdaysForHome,
 } from "@/lib/contacts";
 import { listContactGroups, listGroups } from "@/lib/groups";
 
@@ -59,6 +60,16 @@ describe("only one's own contacts", () => {
     expect(names(await listDueContacts(b.id))).toEqual(["Борис"]);
     expect(names(await listDueContactsForHome(b.id, "", null))).toEqual(["Борис"]);
     expect(names(await listDueContacts(userA().id))).toEqual(["Анна"]);
+  });
+
+  it("Скоро день рождения: A's contact with a birthday tomorrow is not in B's block", async () => {
+    const { a, b } = await twoUsers();
+    const today = { year: 2026, month: 11, day: 12 };
+    await createContactRow({ name: "Анна", birthDay: 13, birthMonth: 11 });
+    await createContactRow({ name: "Борис", birthDay: 14, birthMonth: 11, userId: b.id });
+
+    expect(names(await listUpcomingBirthdaysForHome(b.id, "", null, today))).toEqual(["Борис"]);
+    expect(names(await listUpcomingBirthdaysForHome(a.id, "", null, today))).toEqual(["Анна"]);
   });
 
   it("A's contact, its notes and groups come back empty for B", async () => {

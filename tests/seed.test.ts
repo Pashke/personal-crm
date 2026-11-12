@@ -1,8 +1,9 @@
-import { count, eq, inArray } from "drizzle-orm";
+import { asc, count, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { getDb } from "@/db";
 import { contactGroups, contacts, groups, notes, users } from "@/db/schema";
+import { nextBirthday } from "@/lib/birthdays";
 
 import { seedDemoData } from "../scripts/demo-data";
 
@@ -79,5 +80,50 @@ describe("demo data", () => {
     await expect(seedDemoData(getDb(), { ownerEmail: undefined, count: COUNT })).rejects.toThrow("OWNER_EMAIL");
 
     expect(await getDb().select().from(contacts)).toEqual([]);
+  });
+});
+
+describe("demo data birthdays", () => {
+  it("Демо-данные: part of the contacts have a birthday, some without a year, several in the coming week", async () => {
+    const owner = userA();
+
+    await seedDemoData(getDb(), { ownerEmail: owner.email, count: COUNT });
+
+    const rows = await getDb()
+      .select({ name: contacts.name, day: contacts.birthDay, month: contacts.birthMonth, year: contacts.birthYear })
+      .from(contacts)
+      .where(eq(contacts.userId, owner.id))
+      .orderBy(asc(contacts.id));
+    const withBirthday = rows.flatMap(({ day, month, year }) =>
+      day !== null && month !== null ? [{ day, month, year }] : [],
+    );
+    expect(withBirthday.length).toBeGreaterThan(COUNT / 3);
+    expect(withBirthday.length).toBeLessThan(COUNT);
+    expect(withBirthday.some((birthday) => birthday.year === null)).toBe(true);
+    expect(withBirthday.some((birthday) => birthday.year !== null)).toBe(true);
+    // Real years of people one knows: from 1950 to 2005.
+    for (const { year } of withBirthday) {
+      if (year !== null) expect(year).toBeGreaterThanOrEqual(1950);
+      if (year !== null) expect(year).toBeLessThanOrEqual(2005);
+    }
+
+    // More than three birthdays from today to a week ahead (the script counts by the UTC date),
+    // so the block on the home page is filled and shows «Показать всех».
+    const now = new Date();
+    const today = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1, day: now.getUTCDate() };
+    const soon = withBirthday.filter((birthday) => nextBirthday(birthday, today).days <= 7);
+    expect(soon.length).toBeGreaterThan(3);
+
+    // The birthdays come from a generator of their own: the names are the same as before them.
+    expect(rows.slice(0, 8).map((row) => row.name)).toEqual([
+      "Ирина Сафонова",
+      "Иван Ермаков",
+      "Егор Калашников",
+      "Борис Фокин",
+      "Юлия Кондратьева",
+      "Елена Владимирова",
+      "Елизавета Рожкова",
+      "Игорь Поляков",
+    ]);
   });
 });

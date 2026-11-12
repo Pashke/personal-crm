@@ -1,9 +1,9 @@
-// The demo data of `pnpm db:seed` (scripts/seed.ts): realistic contacts, notes and group memberships
-// for the owner, the user with the address from OWNER_EMAIL. Only if the owner has no contacts yet,
+// The demo data of `pnpm db:seed` (scripts/seed.ts): realistic contacts, notes, group memberships and
+// birthdays for the owner, the user with the address from OWNER_EMAIL. Only if the owner has no contacts yet,
 // so real data is never mixed with demo data. A function of its own, so tests can call it.
 import { randomUUID } from "node:crypto";
 
-import { fakerRU as faker } from "@faker-js/faker";
+import { base, Faker, fakerRU as faker } from "@faker-js/faker";
 import { count, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
@@ -294,6 +294,46 @@ function pickGroupIds(howMet: string | null, all: { id: number; name: string }[]
   return faker.helpers.arrayElements(all, count).map((group) => group.id);
 }
 
+// Birthdays come from a generator of their own, with its own seed: the main one makes exactly
+// the same calls as before birthdays existed, so names, notes and groups stay as they were.
+const birthdayFaker = new Faker({ locale: base });
+
+type DemoBirthday = { birthDay: number; birthMonth: number; birthYear: number | null } | null;
+
+const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+// How many of the first contacts with a birthday get one from today to a week ahead, so the block
+// «Скоро день рождения» is filled at once and has «Показать всех».
+const UPCOMING_DEMO_BIRTHDAYS = 6;
+
+// About two thirds of contacts get a birthday, a quarter of them without the year; years 1950–2005.
+// This script cannot use src/lib/ (the app image does not have it), so "the coming days" are
+// counted here by the UTC date: a day's shift around midnight does not matter for demo data.
+function makeBirthdays(count: number, now: Date): DemoBirthday[] {
+  birthdayFaker.seed(20261112);
+  let upcoming = 0;
+  return Array.from({ length: count }, () => {
+    if (!birthdayFaker.datatype.boolean({ probability: 2 / 3 })) return null;
+    const birthYear = birthdayFaker.datatype.boolean({ probability: 0.25 })
+      ? null
+      : birthdayFaker.number.int({ min: 1950, max: 2005 });
+
+    if (upcoming < UPCOMING_DEMO_BIRTHDAYS) {
+      upcoming++;
+      const date = new Date(now);
+      date.setUTCDate(date.getUTCDate() + birthdayFaker.number.int({ min: 0, max: 7 }));
+      const birthDay = date.getUTCDate();
+      const birthMonth = date.getUTCMonth() + 1;
+      // 29 February of a leap year is no date in the common years of birth: then without the year.
+      return { birthDay, birthMonth, birthYear: birthMonth === 2 && birthDay === 29 ? null : birthYear };
+    }
+
+    const birthMonth = birthdayFaker.number.int({ min: 1, max: 12 });
+    const birthDay = birthdayFaker.number.int({ min: 1, max: daysInMonth[birthMonth - 1] });
+    return { birthDay, birthMonth, birthYear };
+  });
+}
+
 function makePhone() {
   const digits = (n: number) => faker.string.numeric(n);
   return `+7 9${digits(2)} ${digits(3)}-${digits(2)}-${digits(2)}`;
@@ -353,9 +393,10 @@ export async function seedDemoData(
       };
     });
 
+    const birthdays = makeBirthdays(people.length, now);
     const inserted = await tx
       .insert(contacts)
-      .values(people.map((person) => person.row))
+      .values(people.map((person, index) => ({ ...person.row, ...birthdays[index] })))
       .returning({ id: contacts.id });
 
     const noteRows = inserted.flatMap(({ id }, index) => {

@@ -39,6 +39,9 @@ export default async function EditContactPage({ params }: PageProps<"/contacts/[
           contactFrequency: contact.contactFrequency ?? "none",
           groupIds: contactGroups.map((group) => String(group.id)),
           newGroups: [],
+          birthDay: contact.birthDay?.toString() ?? "",
+          birthMonth: contact.birthMonth?.toString() ?? "",
+          birthYear: contact.birthYear?.toString() ?? "",
         }}
         groups={groups}
         submitLabel="Сохранить"

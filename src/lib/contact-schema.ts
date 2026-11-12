@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { contactFrequencies } from "@/db/schema";
+import { checkBirthday, moscowToday } from "@/lib/birthdays";
 import { groupNameSchema } from "@/lib/group-schema";
 
 // "none" is the form's "Не задано"; it is stored as NULL.
@@ -8,31 +9,43 @@ export const contactFrequencyValues = ["none", ...contactFrequencies] as const;
 export type ContactFrequencyValue = (typeof contactFrequencyValues)[number];
 
 // Messages are shown to the user, so they are in Russian.
-export const contactSchema = z.object({
-  name: z.string().trim().min(1, "Укажите имя").max(200, "Слишком длинное имя"),
-  howMet: z.string().trim().max(500, "Слишком длинный текст"),
-  phone: z
-    .string()
-    .trim()
-    .max(50, "Слишком длинный номер")
-    .regex(/^[\d\s()+\-]*$/, "В телефоне могут быть только цифры, пробелы, +, - и скобки"),
-  email: z
-    .string()
-    .trim()
-    .max(200, "Слишком длинный адрес")
-    .refine((value) => value === "" || z.email().safeParse(value).success, {
-      message: "Похоже, в адресе почты ошибка",
-    }),
-  // Read as plain text, so a value forged in the browser comes back to the form as typed.
-  contactFrequency: z
-    .string()
-    .default("none")
-    .pipe(z.enum(contactFrequencyValues, { error: "Выберите один из вариантов" })),
-  // Ticked existing groups, as sent: the server turns them into ids and skips what is not a group.
-  groupIds: z.array(z.string()).default([]),
-  // Names of groups to create when the contact is saved; a wrong name stops the whole save.
-  newGroups: z.array(groupNameSchema).default([]),
-});
+export const contactSchema = z
+  .object({
+    name: z.string().trim().min(1, "Укажите имя").max(200, "Слишком длинное имя"),
+    howMet: z.string().trim().max(500, "Слишком длинный текст"),
+    phone: z
+      .string()
+      .trim()
+      .max(50, "Слишком длинный номер")
+      .regex(/^[\d\s()+\-]*$/, "В телефоне могут быть только цифры, пробелы, +, - и скобки"),
+    email: z
+      .string()
+      .trim()
+      .max(200, "Слишком длинный адрес")
+      .refine((value) => value === "" || z.email().safeParse(value).success, {
+        message: "Похоже, в адресе почты ошибка",
+      }),
+    // Read as plain text, so a value forged in the browser comes back to the form as typed.
+    contactFrequency: z
+      .string()
+      .default("none")
+      .pipe(z.enum(contactFrequencyValues, { error: "Выберите один из вариантов" })),
+    // Ticked existing groups, as sent: the server turns them into ids and skips what is not a group.
+    groupIds: z.array(z.string()).default([]),
+    // Names of groups to create when the contact is saved; a wrong name stops the whole save.
+    newGroups: z.array(groupNameSchema).default([]),
+    // «День рождения»: the day and the month from the lists, the year typed; empty is "not set".
+    // Read as plain text, like the frequency, so the form gets back exactly what was sent.
+    birthDay: z.string().trim().default(""),
+    birthMonth: z.string().trim().default(""),
+    birthYear: z.string().trim().default(""),
+  })
+  // The three parts are checked together against today in Moscow; their one error goes under
+  // the whole field, as `birthday`.
+  .superRefine((data, ctx) => {
+    const { error } = checkBirthday(data, moscowToday(new Date()));
+    if (error) ctx.addIssue({ code: "custom", path: ["birthday"], message: error });
+  });
 
 export const noteSchema = z.object({
   body: z.string().trim().min(1, "Заметка пустая").max(10_000, "Слишком длинная заметка"),
@@ -40,6 +53,8 @@ export const noteSchema = z.object({
 
 export type ContactValues = z.input<typeof contactSchema>;
 export type ContactField = keyof ContactValues;
+// Errors go by field; the day, the month and the year share one error, `birthday`.
+export type ContactErrorField = ContactField | "birthday";
 
 export const emptyContactValues: ContactValues = {
   name: "",
@@ -49,11 +64,14 @@ export const emptyContactValues: ContactValues = {
   contactFrequency: "none",
   groupIds: [],
   newGroups: [],
+  birthDay: "",
+  birthMonth: "",
+  birthYear: "",
 };
 
 export type ContactFormState = {
   values: ContactValues;
-  errors?: Partial<Record<ContactField, string>>;
+  errors?: Partial<Record<ContactErrorField, string>>;
   message?: string;
 };
 

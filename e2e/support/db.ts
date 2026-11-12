@@ -39,18 +39,29 @@ type SeededContact = {
   notes?: { body: string; createdAt: Date }[];
   // Group names; a group of the owner is created on first use.
   groups?: string[];
+  // Month 1–12; the year may be left out.
+  birthday?: { day: number; month: number; year?: number | null };
 };
 
-// One contact of the owner with its frequency, notes and groups; returns its id.
+// One contact of the owner with its frequency, notes, groups and birthday; returns its id.
 export async function seedContact(
   owner: string,
-  { name, frequency, createdAt = new Date(), notes = [], groups = [] }: SeededContact,
+  { name, frequency, createdAt = new Date(), notes = [], groups = [], birthday }: SeededContact,
 ) {
   return withTestClient(testDatabaseName(), async (client) => {
     const userId = await userIdOf(client, owner);
     const { rows } = await client.query<{ id: number }>(
-      "INSERT INTO contacts (user_id, name, contact_frequency, created_at) VALUES ($1, $2, $3, $4) RETURNING id",
-      [userId, name, frequency ?? null, createdAt],
+      `INSERT INTO contacts (user_id, name, contact_frequency, created_at, birth_day, birth_month, birth_year)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [
+        userId,
+        name,
+        frequency ?? null,
+        createdAt,
+        birthday?.day ?? null,
+        birthday?.month ?? null,
+        birthday?.year ?? null,
+      ],
     );
     const id = rows[0].id;
     for (const note of notes) {

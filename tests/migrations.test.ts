@@ -44,10 +44,12 @@ afterEach(async () => {
   for (const folder of tempFolders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
 
-// Everything the app kept before sign-in appeared, in a stable order, without the owner column
-// that the sign-in feature adds: "the same rows and fields as before".
-const withoutOwner = (rows: Record<string, unknown>[]) =>
-  rows.map((row) => Object.fromEntries(Object.entries(row).filter(([column]) => column !== "user_id")));
+// Everything the app kept before sign-in appeared, in a stable order, without the columns that
+// later features add (the owner, the birthday): "the same rows and fields as before". What those
+// columns get for old rows is checked by the tests of their own migrations.
+const columnsAddedLater = new Set(["user_id", "birth_day", "birth_month", "birth_year"]);
+const withoutLaterColumns = (rows: Record<string, unknown>[]) =>
+  rows.map((row) => Object.fromEntries(Object.entries(row).filter(([column]) => !columnsAddedLater.has(column))));
 
 async function readAppData(client: Client) {
   const contacts = await client.query("select * from contacts order by id");
@@ -55,9 +57,9 @@ async function readAppData(client: Client) {
   const groups = await client.query("select * from groups order by id");
   const links = await client.query("select * from contact_groups order by contact_id, group_id");
   return {
-    contacts: withoutOwner(contacts.rows),
+    contacts: withoutLaterColumns(contacts.rows),
     notes: notes.rows,
-    groups: withoutOwner(groups.rows),
+    groups: withoutLaterColumns(groups.rows),
     links: links.rows,
   };
 }
@@ -82,6 +84,94 @@ async function tableNames(client: Client) {
   );
   return rows.map((row) => row.tablename);
 }
+
+describe("birthdays migration", () => {
+  // Data as it is once sign-in exists: every contact and group has an owner, the user that
+  // migration 0005 made of the owner's email.
+  async function insertOwnedAppData(client: Client) {
+    const { rows } = await client.query<{ id: string }>("select id from users");
+    const owner = rows[0].id;
+    await client.query(
+      `insert into contacts (user_id, name, how_met, phone, email, contact_frequency) values
+         ($1, 'Анна Соколова', 'Однокурсница', '+7 900 123-45-67', 'anna@example.com', 'month'),
+         ($1, 'Иван Петров', null, null, null, null)`,
+      [owner],
+    );
+    await client.query(
+      `insert into notes (contact_id, body) values (1, 'Созвонились'), (1, 'Встретились на кофе'), (2, 'Написал сам')`,
+    );
+    await client.query(`insert into groups (user_id, name) values ($1, 'Коллеги')`, [owner]);
+    await client.query(`insert into contact_groups (contact_id, group_id) values (1, 1), (1, 4), (2, 6)`);
+  }
+
+  const readAll = async (client: Client) => {
+    const [contacts, notes, groups, links] = await Promise.all([
+      client.query("select * from contacts order by id"),
+      client.query("select * from notes order by id"),
+      client.query("select * from groups order by id"),
+      client.query("select * from contact_groups order by contact_id, group_id"),
+    ]);
+    return { contacts: contacts.rows, notes: notes.rows, groups: groups.rows, links: links.rows };
+  };
+
+  it("Контакты, добавленные до фичи: no birthday, other fields and notes unchanged", async () => {
+    await applyMigrations(scratchDb, migrationsUpTo("0005_owner_of_data"));
+    const before = await withTestClient(scratchDb, async (client) => {
+      await insertOwnedAppData(client);
+      return readAll(client);
+    });
+
+    await applyMigrations(scratchDb);
+
+    await withTestClient(scratchDb, async (client) => {
+      const after = await readAll(client);
+      // Every other column is as it was: the old rows plus the three new columns, all empty.
+      expect(after.contacts).toEqual(
+        before.contacts.map((row) => ({ ...row, birth_day: null, birth_month: null, birth_year: null })),
+      );
+      expect(after.notes).toEqual(before.notes);
+      expect(after.groups).toEqual(before.groups);
+      expect(after.links).toEqual(before.links);
+    });
+  });
+
+  it("the database refuses a birthday that cannot be: half a date, a year alone, month 13, year 1899", async () => {
+    await applyMigrations(scratchDb);
+
+    await withTestClient(scratchDb, async (client) => {
+      const { rows } = await client.query<{ id: string }>("select id from users");
+      const insert = (day: number | null, month: number | null, year: number | null) =>
+        client.query(
+          "insert into contacts (user_id, name, birth_day, birth_month, birth_year) values ($1, 'Анна', $2, $3, $4)",
+          [rows[0].id, day, month, year],
+        );
+
+      for (const [day, month, year] of [
+        [15, null, null],
+        [null, 5, null],
+        [null, null, 1990],
+        [15, null, 1990],
+        [15, 13, null],
+        [0, 5, null],
+        [32, 5, null],
+        [15, 5, 1899],
+      ]) {
+        await expect(insert(day, month, year), `${day}.${month}.${year}`).rejects.toThrow(/check constraint/);
+      }
+
+      // What the form may save: no date, a day with a month, a full date.
+      await insert(null, null, null);
+      await insert(29, 2, null);
+      await insert(15, 5, 1990);
+      const saved = await client.query("select birth_day, birth_month, birth_year from contacts order by id");
+      expect(saved.rows).toEqual([
+        { birth_day: null, birth_month: null, birth_year: null },
+        { birth_day: 29, birth_month: 2, birth_year: null },
+        { birth_day: 15, birth_month: 5, birth_year: 1990 },
+      ]);
+    });
+  });
+});
 
 describe("sign-in tables migration", () => {
   it("adds the sign-in tables, existing contacts, notes, groups and links unchanged", async () => {
@@ -257,7 +347,7 @@ describe("default groups migration", () => {
 
     await withTestClient(scratchDb, async (client) => {
       const [contacts, notes] = await read(client);
-      expect(withoutOwner(contacts.rows)).toEqual(before[0].rows);
+      expect(withoutLaterColumns(contacts.rows)).toEqual(before[0].rows);
       expect(notes.rows).toEqual(before[1].rows);
 
       const links = await client.query<{ count: string }>("select count(*) from contact_groups");
@@ -295,7 +385,9 @@ describe("contact frequency migration", () => {
       const [contacts, notes] = await read(client);
       expect(contacts.rows.map((row) => row.contact_frequency)).toEqual([null, null]);
       // Every other column is as it was: the old rows plus the new column set to «Не задано».
-      expect(withoutOwner(contacts.rows)).toEqual(before[0].rows.map((row) => ({ ...row, contact_frequency: null })));
+      expect(withoutLaterColumns(contacts.rows)).toEqual(
+        before[0].rows.map((row) => ({ ...row, contact_frequency: null })),
+      );
       expect(notes.rows).toEqual(before[1].rows);
     });
   });

@@ -5,12 +5,17 @@ import { DeletedContactNotice } from "@/components/deleted-contact-notice";
 import { DueContacts, type DueContactRow } from "@/components/due-contacts";
 import { SearchBox } from "@/components/search-box";
 import { Button } from "@/components/ui/button";
-import { countContacts, listContacts, listDueContactsForHome } from "@/lib/contacts";
+import { UpcomingBirthdays, type UpcomingBirthdayRow } from "@/components/upcoming-birthdays";
+import { moscowToday } from "@/lib/birthdays";
+import { countContacts, listContacts, listDueContactsForHome, listUpcomingBirthdaysForHome } from "@/lib/contacts";
 import {
   emptyListText,
+  formatBirthdayWhen,
   formatContactsSummary,
+  formatDayMonth,
   formatGroupNames,
   formatLastContact,
+  formatTurning,
   frequencyLabelInline,
   initials,
   splitMatches,
@@ -31,15 +36,27 @@ export default async function ContactsPage({ searchParams }: PageProps<"/">) {
   const groupId = resolveSelectedGroup(group, groups);
   const selectedGroup = groups.find((item) => item.id === groupId) ?? null;
 
-  const [items, total, due] = await Promise.all([
+  // The texts are worded here, at the moment of this request, so the browser gets them ready.
+  // Birthdays go by today's date in Moscow.
+  const now = new Date();
+
+  const [items, total, due, birthdays] = await Promise.all([
     listContacts(user.id, query, groupId),
     countContacts(user.id),
     listDueContactsForHome(user.id, query, groupId),
+    listUpcomingBirthdaysForHome(user.id, query, groupId, moscowToday(now)),
   ]);
   const addedContact = addedId ? items.find((item) => item.id === addedId) : undefined;
 
-  // The texts are worded here, at the moment of this request, so the browser gets them ready.
-  const now = new Date();
+  const birthdayRows: UpcomingBirthdayRow[] = birthdays.map((contact) => ({
+    id: contact.id,
+    name: contact.name,
+    initials: initials(contact.name),
+    date: formatDayMonth(contact.next.date),
+    when: formatBirthdayWhen(contact.next.days),
+    isToday: contact.next.days === 0,
+    turning: formatTurning(contact.next),
+  }));
   const dueRows: DueContactRow[] = due.map((contact) => ({
     id: contact.id,
     name: contact.name,
@@ -89,6 +106,8 @@ export default async function ContactsPage({ searchParams }: PageProps<"/">) {
           ))}
         </nav>
       )}
+
+      {birthdayRows.length > 0 && <UpcomingBirthdays rows={birthdayRows} />}
 
       {dueRows.length > 0 && <DueContacts rows={dueRows} />}
 
