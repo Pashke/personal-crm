@@ -1,9 +1,10 @@
-# Production stack on the server, docker compose project "prod".
-# Do not run docker compose on this file directly: use deploy/deploy.sh (deploys a version)
-# or deploy/compose.sh (manual commands). They set the project name, the env file
-# and APP_IMAGE, the app image to run.
+# The app stack on the server, one file for both environments: docker compose project "prod" or "staging"
+# (the test stand). Do not run docker compose on this file directly: use deploy/deploy.sh (deploys a version)
+# or deploy/compose.sh (manual commands). They pick the environment (use_env in deploy/lib.sh) and set
+# the project name, the env file, APP_URL, APP_PORT, the memory limits and APP_IMAGE, the app image to run.
 #
-# Settings come from /home/deploy/personal-crm/.env (mode 600), one line each:
+# Secrets come from the .env of the environment (mode 600): /home/deploy/personal-crm/.env for prod,
+# /home/deploy/personal-crm-staging/.env for the test stand. One line each:
 #   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB - the database
 #   OWNER_EMAIL         - the owner of the data that existed before sign-in (migrations, demo data)
 #   BETTER_AUTH_SECRET  - signs the session cookies, a long random string
@@ -40,6 +41,8 @@ x-app-base: &app-base
   depends_on:
     postgres:
       condition: service_healthy
+  # 0 = no limit (prod), the test stand has one.
+  mem_limit: ${APP_MEMORY_LIMIT:?APP_MEMORY_LIMIT is not set, run this stack through deploy/deploy.sh or deploy/compose.sh}
   logging: *logging
 
 services:
@@ -50,6 +53,7 @@ services:
     # No published port: only containers of this project can reach the database.
     volumes:
       - postgres-data:/var/lib/postgresql
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:?POSTGRES_MEMORY_LIMIT is not set, run this stack through deploy/deploy.sh or deploy/compose.sh}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -62,13 +66,13 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
-      # The public address: sign-in links lead here; https makes the session cookies Secure.
-      BETTER_AUTH_URL: https://app.whobook.ru
+      # The public address of the environment: sign-in links lead here; https makes the session cookies Secure.
+      BETTER_AUTH_URL: ${APP_URL:?APP_URL is not set, run this stack through deploy/deploy.sh or deploy/compose.sh}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is not set in .env}
       SMTP_URL: ${SMTP_URL:?SMTP_URL is not set in .env}
     # Only nginx on the same server reaches the app, the port is not open to the internet.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${APP_PORT:?APP_PORT is not set, run this stack through deploy/deploy.sh or deploy/compose.sh}:3000"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
       interval: 30s

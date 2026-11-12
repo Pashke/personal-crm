@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Manual rollback: starts an earlier version of the app again. Never runs automatically.
+# Manual rollback of prod: starts an earlier version of the app again. Never runs automatically.
+# The test stand has no rollback script: deploy.sh staging <older sha> does the same there.
 #
 # Usage (on the server as user deploy):
 #   rollback.sh          - back to the last good version:
@@ -12,6 +13,7 @@
 # To also get the database of that time back, run restore.sh after the rollback.
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+use_env prod
 
 current="$(read_version "$CURRENT_FILE")"
 running="$(running_version)"
@@ -33,4 +35,4 @@ $(docker image ls "$IMAGE_REPO" --format '    {{.Tag}}')"
 [ "$target" != "$running" ] || die "version $target is already running"
 
 log "Rolling back: ${running:-nothing running} -> $target"
-exec bash "$APP_DIR/deploy/deploy.sh" "$target" < /dev/null
+exec bash "$APP_DIR/deploy/deploy.sh" prod "$target" < /dev/null
