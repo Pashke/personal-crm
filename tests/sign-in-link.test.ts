@@ -70,7 +70,10 @@ describe("the sign-in link", () => {
       return url.toString();
     };
 
-    expect(await openLink(withToken(`${token.slice(0, -1)}x`))).toEqual(expired);
+    // The last letter is always replaced by a different one: a token that already ends with "x"
+    // would stay whole with a fixed "x" (1 run in 52) and sign in.
+    const changed = `${token.slice(0, -1)}${token.endsWith("x") ? "y" : "x"}`;
+    expect(await openLink(withToken(changed))).toEqual(expired);
     expect(await openLink(withToken(token.slice(0, 10)))).toEqual(expired);
     expect(await openLink(withToken(""))).toEqual(expired);
     // The real link still works: a wrong guess does not burn it.
