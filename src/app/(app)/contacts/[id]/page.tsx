@@ -8,8 +8,9 @@ import { BackLink } from "@/components/back-link";
 import { DeleteContactButton } from "@/components/delete-contact-button";
 import { NoteForm } from "@/components/note-form";
 import { Button } from "@/components/ui/button";
+import { moscowToday } from "@/lib/birthdays";
 import { getContact, listNotes } from "@/lib/contacts";
-import { formatDateTime, formatDueStatus, frequencyLabels } from "@/lib/format";
+import { formatBirthday, formatDateTime, formatDueStatus, frequencyLabels } from "@/lib/format";
 import { listContactGroups } from "@/lib/groups";
 import { homeHref } from "@/lib/home-href";
 import { parseId } from "@/lib/ids";
@@ -39,6 +40,11 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
   // The due date is read from the database on every request, so "now" is this request's moment.
   const now = new Date();
   const overdue = contact.dueAt !== null && contact.dueAt <= now;
+  // The age is counted by today's date in Moscow. Day and month are always set together.
+  const birthday =
+    contact.birthDay !== null && contact.birthMonth !== null
+      ? { day: contact.birthDay, month: contact.birthMonth, year: contact.birthYear }
+      : null;
 
   return (
     <div className="flex flex-col gap-10 md:gap-14">
@@ -88,6 +94,7 @@ export default async function ContactPage({ params }: PageProps<"/contacts/[id]"
               </a>
             )}
           </Detail>
+          <Detail label="День рождения">{formatBirthday(birthday, moscowToday(now))}</Detail>
           <Detail label="Как часто общаться">
             {contact.contactFrequency && contact.dueAt && (
               <>

@@ -1,5 +1,16 @@
 import { sql } from "drizzle-orm";
-import { index, integer, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  check,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  smallint,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 import { users } from "./auth-schema";
 
@@ -15,6 +26,11 @@ export const contactFrequencyEnum = pgEnum("contact_frequency", contactFrequenci
 
 // Every contact belongs to one user, its owner: only the owner sees and changes it. The link to
 // users has no cascade, so deleting a user by hand cannot wipe their contacts: the database refuses.
+//
+// The birthday is three optional numbers, the year optional on its own: NULL means "not set".
+// The checks below hold whatever the day: a day and a month go together, a year only with them.
+// Whether the date exists (no 31 April) and is not in the future is checked by the server
+// (src/lib/birthdays.ts): "today" changes, while a check constraint must not.
 export const contacts = pgTable(
   "contacts",
   {
@@ -27,10 +43,20 @@ export const contacts = pgTable(
     phone: text(),
     email: text(),
     contactFrequency: contactFrequencyEnum("contact_frequency"),
+    birthDay: smallint("birth_day"),
+    birthMonth: smallint("birth_month"),
+    birthYear: smallint("birth_year"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("contacts_user_id_idx").on(table.userId)],
+  (table) => [
+    index("contacts_user_id_idx").on(table.userId),
+    check("contacts_birth_day_month_together", sql`(${table.birthDay} is null) = (${table.birthMonth} is null)`),
+    check("contacts_birth_year_with_date", sql`${table.birthYear} is null or ${table.birthDay} is not null`),
+    check("contacts_birth_day_range", sql`${table.birthDay} between 1 and 31`),
+    check("contacts_birth_month_range", sql`${table.birthMonth} between 1 and 12`),
+    check("contacts_birth_year_range", sql`${table.birthYear} >= 1900`),
+  ],
 );
 
 // A note belongs to the owner of its contact.

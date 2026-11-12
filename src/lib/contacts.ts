@@ -6,6 +6,7 @@ import { cache } from "react";
 
 import { getDb } from "@/db";
 import { contactGroups, contacts, notes, type ContactFrequency } from "@/db/schema";
+import { nextBirthday, type CalendarDate } from "@/lib/birthdays";
 import { describeError } from "@/lib/describe-error";
 
 // Every read waits for a request: contacts change at runtime, so pages must never be
@@ -118,6 +119,47 @@ export async function listDueContacts(userId: string, groupId?: number | null) {
 // «Пора связаться» as the home page shows it: hidden while a search is typed, so not even queried then.
 export async function listDueContactsForHome(userId: string, query: string, groupId: number | null) {
   return query ? [] : listDueContacts(userId, groupId);
+}
+
+// Every contact of the user with a birthday, in the order of the list (by name); with a group
+// selected, only the members of that group. The day and the month are set together (a check in
+// the database), so one of them is enough to filter by.
+export async function listBirthdays(userId: string, groupId?: number | null) {
+  await connection();
+  const rows = await getDb()
+    .select({
+      id: contacts.id,
+      name: contacts.name,
+      // Never NULL here: contacts without a birthday are filtered out below.
+      day: sql<number>`${contacts.birthDay}`,
+      month: sql<number>`${contacts.birthMonth}`,
+      year: contacts.birthYear,
+    })
+    .from(contacts)
+    .where(and(ownedBy(userId), isNotNull(contacts.birthDay), inGroup(groupId)))
+    .orderBy(sql`${contacts.name} collate "ru-x-icu"`, asc(contacts.id));
+  return rows.map(({ id, name, day, month, year }) => ({ id, name, birthday: { day, month, year } }));
+}
+
+// How far ahead «Скоро день рождения» looks: today and the next 7 days.
+const UPCOMING_BIRTHDAY_DAYS = 7;
+
+// «Скоро день рождения» as the home page shows it: birthdays from today to a week ahead, the
+// nearest first. The sort is stable, so within a day the order by name stays. The window is
+// counted here rather than in SQL, by the same function as the age and the texts.
+// Hidden while a search is typed, so not even queried then.
+export async function listUpcomingBirthdaysForHome(
+  userId: string,
+  query: string,
+  groupId: number | null,
+  today: CalendarDate,
+) {
+  if (query) return [];
+  const rows = await listBirthdays(userId, groupId);
+  return rows
+    .map((row) => ({ ...row, next: nextBirthday(row.birthday, today) }))
+    .filter((row) => row.next.days <= UPCOMING_BIRTHDAY_DAYS)
+    .sort((a, b) => a.next.days - b.next.days);
 }
 
 // Wrapped in cache() so the page and its metadata share one query per request.

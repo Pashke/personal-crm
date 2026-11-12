@@ -1,4 +1,4 @@
-// Fills the database with realistic demo contacts, notes and group memberships for the owner:
+// Fills the database with realistic demo contacts, notes, group memberships and birthdays for the owner:
 // the user with the address from OWNER_EMAIL in .env (made a user if they have never signed in).
 // Usage: pnpm db:seed. Does nothing if the owner already has contacts, so real data is never mixed
 // with demo data. The data itself: scripts/demo-data.ts.

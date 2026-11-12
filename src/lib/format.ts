@@ -1,4 +1,5 @@
 import type { ContactFrequency } from "@/db/schema";
+import { ageOn, type Birthday, type CalendarDate, type NextBirthday } from "@/lib/birthdays";
 
 // Picks the Russian plural form: 1 контакт, 2 контакта, 5 контактов.
 export function pluralize(count: number, forms: [one: string, few: string, many: string]) {
@@ -166,4 +167,51 @@ export function splitMatches(text: string, query: string) {
     else parts.push({ text: text[i], match: matched[i] });
   }
   return parts;
+}
+
+// Month names in the genitive, as they sound in a date: "15 мая". Index 0 is January.
+// The birthday field of the form, the home page block and the contact page all take them from here.
+export const monthNamesGenitive = [
+  "января",
+  "февраля",
+  "марта",
+  "апреля",
+  "мая",
+  "июня",
+  "июля",
+  "августа",
+  "сентября",
+  "октября",
+  "ноября",
+  "декабря",
+] as const;
+
+// "13 ноября".
+export function formatDayMonth({ day, month }: { day: number; month: number }) {
+  return `${day} ${monthNamesGenitive[month - 1]}`;
+}
+
+// When the birthday is: "сегодня", "завтра", "через 5 дней".
+export function formatBirthdayWhen(days: number) {
+  if (days === 0) return "сегодня";
+  if (days === 1) return "завтра";
+  return `через ${formatDays(days)}`;
+}
+
+// How old the person turns: "исполняется 40" on the day itself, "исполнится 36" before it;
+// null without the year of birth.
+export function formatTurning({ days, turning }: NextBirthday) {
+  if (turning === null) return null;
+  return days === 0 ? `исполняется ${turning}` : `исполнится ${turning}`;
+}
+
+// «День рождения» on the contact page: "15 мая 1990 · 36 лет", without the year "15 мая".
+// The age is left out while it is 0. Null when no birthday is set: the page draws a dash.
+export function formatBirthday(birthday: Birthday | null, today: CalendarDate) {
+  if (!birthday) return null;
+  const date = formatDayMonth(birthday);
+  if (birthday.year === null) return date;
+  const age = ageOn(birthday, today);
+  const withYear = `${date} ${birthday.year}`;
+  return age ? `${withYear} · ${age} ${pluralize(age, ["год", "года", "лет"])}` : withYear;
 }

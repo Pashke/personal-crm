@@ -10,6 +10,7 @@ import { contacts, notes } from "@/db/schema";
 import {
   contactSchema,
   noteSchema,
+  type ContactErrorField,
   type ContactField,
   type ContactFormState,
   type ContactValues,
@@ -254,6 +255,9 @@ function readContactValues(formData: FormData): ContactValues {
     contactFrequency: frequency === null ? undefined : String(frequency),
     groupIds: formData.getAll("groupIds").map(String),
     newGroups: formData.getAll("newGroups").map(String),
+    birthDay: read("birthDay"),
+    birthMonth: read("birthMonth"),
+    birthYear: read("birthYear"),
   };
 }
 
@@ -265,21 +269,26 @@ function toGroupIds(raw: string[]) {
 }
 
 // Empty optional fields are stored as NULL rather than empty strings, and so is "Не задано".
+// The parts of the birthday are numbers by now: the schema has checked them.
 function toContactRow(data: z.output<typeof contactSchema>) {
+  const numberOrNull = (value: string) => (value === "" ? null : Number(value));
   return {
     name: data.name,
     howMet: data.howMet || null,
     phone: data.phone || null,
     email: data.email || null,
     contactFrequency: data.contactFrequency === "none" ? null : data.contactFrequency,
+    birthDay: numberOrNull(data.birthDay),
+    birthMonth: numberOrNull(data.birthMonth),
+    birthYear: numberOrNull(data.birthYear),
   };
 }
 
 function firstErrors(error: z.ZodError<ContactValues>) {
   const fieldErrors = z.flattenError(error).fieldErrors;
-  const result: Partial<Record<ContactField, string>> = {};
+  const result: Partial<Record<ContactErrorField, string>> = {};
   for (const [field, messages] of Object.entries(fieldErrors)) {
-    if (messages?.[0]) result[field as ContactField] = messages[0];
+    if (messages?.[0]) result[field as ContactErrorField] = messages[0];
   }
   return result;
 }

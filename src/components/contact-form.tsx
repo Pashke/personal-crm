@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ContactField, ContactFormState, ContactFrequencyValue, ContactValues } from "@/lib/contact-schema";
-import { frequencyLabels } from "@/lib/format";
+import { frequencyLabels, monthNamesGenitive } from "@/lib/format";
 import { addPendingGroup } from "@/lib/pending-group";
+import { cn } from "@/lib/utils";
 
 type GroupOption = { id: number; name: string };
 
@@ -30,7 +31,7 @@ const frequencyOptions: { value: ContactFrequencyValue; label: string }[] = [
 ];
 
 const fields: {
-  name: Exclude<ContactField, "contactFrequency" | "groupIds" | "newGroups">;
+  name: Exclude<ContactField, "contactFrequency" | "groupIds" | "newGroups" | "birthDay" | "birthMonth" | "birthYear">;
   label: string;
   type: "text" | "tel" | "email";
   placeholder: string;
@@ -82,6 +83,17 @@ export function ContactForm({ action, initialValues, groups, submitLabel, cancel
         );
       })}
 
+      <BirthdayField
+        // After a failed save React resets the form to the default values. Unlike inputs, a <select>
+        // keeps the default of its first render, so the field is rebuilt whenever the values sent
+        // back differ: the chosen day and month survive an error.
+        key={[state.values.birthDay, state.values.birthMonth, state.values.birthYear].join("|")}
+        day={state.values.birthDay ?? ""}
+        month={state.values.birthMonth ?? ""}
+        year={state.values.birthYear ?? ""}
+        error={state.errors?.birthday}
+      />
+
       <FrequencyField selected={state.values.contactFrequency} error={state.errors?.contactFrequency} />
 
       <GroupsField
@@ -106,6 +118,71 @@ export function ContactForm({ action, initialValues, groups, submitLabel, cancel
         </Button>
       </div>
     </form>
+  );
+}
+
+const dayOptions = Array.from({ length: 31 }, (_, index) => String(index + 1));
+
+// A plain list drawn like the text fields (see Input).
+const selectClass =
+  "h-11.5 min-w-0 cursor-pointer rounded-sm border-2 border-transparent bg-input pr-1 pl-3 text-field text-popover-foreground transition-colors aria-invalid:border-primary md:h-13.5 md:pl-4";
+
+// «День рождения»: the day and the month from plain lists, the year typed; all of it optional,
+// the year on its own too. Empty values in both lists and an empty year erase the date.
+// The server checks the three together and returns one error for the whole field.
+function BirthdayField({ day, month, year, error }: { day: string; month: string; year: string; error?: string }) {
+  const errorId = "birthday-error";
+  const invalid = error ? true : undefined;
+  return (
+    <fieldset className="flex min-w-0 flex-col gap-2" aria-describedby={error ? errorId : undefined}>
+      <legend className="mb-2.5 font-display text-label font-medium text-accent uppercase">День рождения</legend>
+      <div className="flex flex-wrap gap-2 md:gap-3">
+        <select
+          name="birthDay"
+          aria-label="День"
+          defaultValue={day}
+          aria-invalid={invalid}
+          className={cn(selectClass, "w-19 shrink-0 md:w-28")}
+        >
+          <option value="">День</option>
+          {dayOptions.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+        <select
+          name="birthMonth"
+          aria-label="Месяц"
+          defaultValue={month}
+          aria-invalid={invalid}
+          className={cn(selectClass, "min-w-28 flex-1")}
+        >
+          <option value="">Месяц</option>
+          {monthNamesGenitive.map((name, index) => (
+            <option key={name} value={String(index + 1)}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <Input
+          name="birthYear"
+          aria-label="Год"
+          placeholder="Год"
+          inputMode="numeric"
+          maxLength={4}
+          autoComplete="off"
+          defaultValue={year}
+          aria-invalid={invalid}
+          className="w-17 shrink-0 px-3 md:w-28 md:px-4.5"
+        />
+      </div>
+      {error && (
+        <p id={errorId} className="text-meta text-destructive">
+          {error}
+        </p>
+      )}
+    </fieldset>
   );
 }
 
