@@ -1,0 +1,86 @@
+# Deploy to prod (https://app.whobook.ru), by hand only: Actions -> Deploy prod -> Run workflow, from main.
+#   SHA field empty -> the commit of the latest successful Deploy staging run on main;
+#   SHA by hand     -> that commit, only if it has a successful Deploy staging run on main;
+#   rollback box    -> the prod version before the current one (the server remembers it),
+#                      without the test stand check; the SHA field is ignored.
+# The same image as on the test stand. On the server: database backup -> migrations -> new version -> smoke /health.
+# The run summary says which SHA was deployed. After a successful deploy, GHCR keeps the 10 newest builds.
+# The logic lives in deploy/ (see deploy/ci-deploy.sh and deploy/ci-ghcr-cleanup.sh); this file only calls it.
+name: Deploy prod
+run-name: "Deploy prod: ${{ inputs.rollback && 'rollback to the previous version' || inputs.sha || 'the latest test stand version' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to deploy. Empty: the latest version that passed the test stand"
+        type: string
+        required: false
+        default: ""
+      rollback:
+        description: "Roll back to the prod version before the current one (the SHA field is ignored)"
+        type: boolean
+        default: false
+
+# Runs never overlap and are never cancelled halfway.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+      # Reads the history of Deploy staging runs.
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Pick the version, backup, migrations, new version, smoke /health
+        if: ${{ !inputs.rollback }}
+        run: bash deploy/ci-deploy.sh prod
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          INPUT_SHA: ${{ inputs.sha }}
+
+      - name: Roll back to the previous prod version
+        if: ${{ inputs.rollback }}
+        run: bash deploy/ci-deploy.sh prod-rollback
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+
+  ghcr-cleanup:
+    name: Keep the 10 newest builds in GHCR
+    # Only after a successful deploy or rollback. If the cleanup fails, the deploy job above stays green.
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Deletes old versions of the image package.
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Delete the builds older than the 10 newest
+        run: bash deploy/ci-ghcr-cleanup.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -10,8 +10,8 @@
 # load the backup -> start the same app version again -> smoke /health.
 #
 # It never changes the app version and does not run migrations. To get the database back together
-# with the app version it was taken at, roll back first (rollback.sh <version from the file name>),
-# then restore.
+# with the app version it was taken at, first deploy that version to prod (Deploy prod in GitHub with the
+# SHA from the file name, or the rollback box if it is the previous prod version), then restore.
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 trap 'printf "\nERROR: command failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
@@ -74,8 +74,9 @@ info "First, a copy of the current database is saved to $BACKUP_DIR"
 if [ -n "$backup_version" ] && [ "$backup_version" != "$version" ]; then
   printf '\nWARNING: the backup was taken at app version %s,\n' "$backup_version"
   info "but version $version is running and may not work with that database."
-  info "To get the app and the database of that time back: answer no, run"
-  info "rollback.sh $backup_version, then run restore again."
+  info "To get the app and the database of that time back: answer no, run Deploy prod in GitHub"
+  info "with SHA $backup_version (or the rollback box if it is the previous prod version),"
+  info "then run restore again."
 fi
 printf '\n'
 read -r -p "Type yes to replace the database: " answer || answer=""

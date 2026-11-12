@@ -220,12 +220,15 @@ prune_deploy_backups() {
   done
 }
 
-# Deletes this app's images that no environment needs any more. Runs after a successful prod deploy.
-# Kept: the current and the previous prod version, the current test stand version,
-# and any image a container still uses (docker refuses to delete those).
+# Deletes this app's images older than IMAGE_MAX_AGE_DAYS (by build time) that no environment needs.
+# Runs after a successful prod deploy or rollback.
+# Kept: the current and the previous prod version, the current test stand version, every image younger
+# than IMAGE_MAX_AGE_DAYS, and any image a container still uses (docker refuses to delete those).
 # Waits for a running test stand deploy first: it may have pulled an image it has not recorded yet.
+IMAGE_MAX_AGE_DAYS=14
 prune_images() {
-  local staging_state="$STAGING_DIR/state" keep tag
+  local staging_state="$STAGING_DIR/state" keep tag built cutoff
+  cutoff="$(date -u -d "$IMAGE_MAX_AGE_DAYS days ago" +%s)"
   if [ -d "$staging_state" ]; then
     exec 8>"$staging_state/deploy.lock"
     if ! flock -n 8; then
@@ -241,6 +244,11 @@ prune_images() {
   while read -r tag; do
     is_sha "$tag" || continue
     [[ "$keep" == *" $tag "* ]] && continue
+    built="$(docker image inspect --format '{{.Created}}' "$IMAGE_REPO:$tag")"
+    if [ "$(date -u -d "$built" +%s)" -gt "$cutoff" ]; then
+      info "kept $IMAGE_REPO:$tag: built ${built:0:10}, younger than $IMAGE_MAX_AGE_DAYS days"
+      continue
+    fi
     if docker image rm "$IMAGE_REPO:$tag" >/dev/null 2>&1; then
       info "removed $IMAGE_REPO:$tag"
     else

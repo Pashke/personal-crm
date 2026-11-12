@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Manual rollback of prod: starts an earlier version of the app again. Never runs automatically.
-# The test stand has no rollback script: deploy.sh staging <older sha> does the same there.
+# Deploy prod in GitHub runs it when you tick the rollback box; by hand on the server it is the fallback
+# for when GitHub is not available. The test stand has no rollback script: deploy.sh staging <older sha>.
 #
 # Usage (on the server as user deploy):
 #   rollback.sh          - back to the last good version:

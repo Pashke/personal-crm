@@ -1,14 +1,14 @@
-# Push to main -> image tagged with the commit SHA -> GHCR -> the same image goes to two environments
-# on the server, independently of each other:
-#   test stand (https://test-app.whobook.ru): migrations -> new version -> smoke /health;
-#   prod (https://app.whobook.ru): database backup -> migrations -> new version -> smoke /health.
+# Push to main -> image tagged with the commit SHA -> GHCR -> the test stand (https://test-app.whobook.ru):
+# migrations -> new version -> smoke /health.
+# Prod is not deployed from here: only by hand, with the Deploy prod workflow. It takes only commits that have
+# a successful run of this workflow on main: these runs are the history of the test stand.
 # The deploy logic lives in deploy/ (see deploy/ci-deploy.sh and deploy/deploy.sh); this file only calls it.
-name: Deploy
+name: Deploy staging
 
 on:
   push:
     branches: [main]
-  # Lets you re-run a deploy of the latest main by hand from the Actions tab.
+  # Lets you re-run a deploy of the latest main to the test stand by hand from the Actions tab.
   workflow_dispatch:
 
 env:
@@ -57,33 +57,6 @@ jobs:
 
       - name: Migrations, new version, smoke /health
         run: bash deploy/ci-deploy.sh staging
-        env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
-          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          IMAGE_TAG: ${{ github.sha }}
-          REGISTRY_USER: ${{ github.actor }}
-          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  deploy-prod:
-    name: Deploy to prod
-    # Does not wait for the test stand: for now prod is deployed on every push to main, as before.
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Deploys to prod never overlap and are never cancelled halfway.
-    concurrency:
-      group: deploy-prod
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Backup, migrations, new version, smoke /health
-        run: bash deploy/ci-deploy.sh prod
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
