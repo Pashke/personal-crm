@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploys one version of the app to one environment on the server, as user "deploy":
-#   prod:    database backup -> image -> migrations (one-off container) -> new app container -> smoke /health
-#            -> cleanup of images older than 2 weeks that no environment needs;
+#   prod:    database backup (the newest 7 deploy backups are kept) -> image -> migrations (one-off container)
+#            -> new app container -> smoke /health -> cleanup of images older than 2 weeks that no environment needs;
 #   staging: (database still empty: load a copy of the newest prod backup) -> image -> migrations
 #            -> new app container -> smoke /health. No backup.
 # GitHub Actions calls it through deploy/ci-deploy.sh: the test stand on every push to main (Deploy staging),
@@ -45,7 +45,7 @@ if [ "$ENV_NAME" = prod ]; then
   log "Database backup (app version before this deploy: ${before:-none})"
   compose up --detach --wait postgres < /dev/null
   backup_db deploy "${before:-none}"
-  prune_deploy_backups
+  prune_backups deploy
 else
   log "Database (no backup on the test stand)"
   compose up --detach --wait postgres < /dev/null

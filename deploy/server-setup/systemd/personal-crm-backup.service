@@ -1,0 +1,17 @@
+# managed-by: personal-crm deploy/server-setup
+# Daily backup of the prod database of personal-crm. Started by personal-crm-backup.timer.
+# The script itself comes to the server with every prod deploy (Deploy prod copies deploy/).
+# Result of the last run: systemctl status personal-crm-backup.service
+[Unit]
+Description=personal-crm: daily backup of the prod database
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+ExecStart=/bin/bash /home/deploy/personal-crm/deploy/backup.sh
+# Waiting for a running deploy takes up to 10 minutes, the dump itself takes seconds.
+TimeoutStartSec=30min
+NoNewPrivileges=yes

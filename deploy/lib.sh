@@ -1,4 +1,4 @@
-# Shared settings and helpers for the server scripts (deploy.sh, rollback.sh, restore.sh, compose.sh,
+# Shared settings and helpers for the server scripts (deploy.sh, rollback.sh, backup.sh, restore.sh, compose.sh,
 # refresh-staging-db.sh). Not run on its own: the scripts load it with "source", then call use_env.
 
 IMAGE_REPO="ghcr.io/pashke/personal-crm"
@@ -13,8 +13,9 @@ STAGING_DIR="$DEPLOY_HOME/personal-crm-staging"
 # Database backups of prod. Outside deploy/, so deploys never replace or delete them.
 # The test stand has no backups of its own: it takes its copy of the prod database from here.
 BACKUP_DIR="$PROD_DIR/backups"
-# Backups taken by deploys are rotated. Copies taken by restore.sh are kept until deleted by hand.
-KEEP_DEPLOY_BACKUPS=10
+# Backups taken before deploys and the daily ones (backup.sh) are rotated separately: the newest
+# KEEP_BACKUPS of each kind are kept. Copies taken by restore.sh are kept until deleted by hand.
+KEEP_BACKUPS=7
 
 log()  { printf '\n==> %s\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
@@ -181,6 +182,7 @@ current_app_version() {
 # and reads the whole dump back to make sure it can be restored.
 # The postgres service must be running. Sets BACKUP_FILE to the path of the new file.
 #   backup_db deploy  <version>  - before a deploy, <version> is the one running before it
+#   backup_db daily   <version>  - the daily backup (backup.sh), <version> is the one running now
 #   backup_db restore <version>  - restore.sh saves the current database before replacing it
 backup_db() {
   local reason=$1 version=${2:-none}
@@ -207,14 +209,20 @@ backup_db() {
   info "saved $file ($(du -h "$file" | cut -f1))"
 }
 
-# Deletes the oldest backups taken by deploys, keeping KEEP_DEPLOY_BACKUPS of them.
+# Deletes the oldest backups of one kind, keeping the newest KEEP_BACKUPS of it.
 # Names start with the time, so in sorted order the oldest come first.
-prune_deploy_backups() {
-  local backups i
+#   prune_backups deploy  - backups taken before deploys
+#   prune_backups daily   - daily backups
+prune_backups() {
+  local kind=$1 backups i
+  case "$kind" in
+    deploy | daily) ;;
+    *) die "prune_backups: unknown kind of backup \"$kind\": expected deploy or daily" ;;
+  esac
   shopt -s nullglob
-  backups=("$BACKUP_DIR"/*_deploy_*.dump)
+  backups=("$BACKUP_DIR"/*_"$kind"_*.dump)
   shopt -u nullglob
-  for ((i = 0; i < ${#backups[@]} - KEEP_DEPLOY_BACKUPS; i++)); do
+  for ((i = 0; i < ${#backups[@]} - KEEP_BACKUPS; i++)); do
     rm -f -- "${backups[i]}"
     info "removed old backup ${backups[i]##*/}"
   done
