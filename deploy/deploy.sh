@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Deploys one version of the app to one environment on the server, as user "deploy":
 #   prod:    database backup -> image -> migrations (one-off container) -> new app container -> smoke /health
-#            -> cleanup of images no environment needs;
+#            -> cleanup of images older than 2 weeks that no environment needs;
 #   staging: (database still empty: load a copy of the newest prod backup) -> image -> migrations
 #            -> new app container -> smoke /health. No backup.
-# GitHub Actions calls it through deploy/ci-deploy.sh on every push to main, for each environment.
-# It can also be run by hand with an older version: that is how rollback.sh works.
+# GitHub Actions calls it through deploy/ci-deploy.sh: the test stand on every push to main (Deploy staging),
+# prod only when you run Deploy prod. It can also be run with an older version: that is how rollback.sh works.
 #
 # Usage: deploy.sh <prod|staging> <git-commit-sha> [registry-user]
 #   If the image is not on the server yet, a GHCR token is read from stdin to pull it.
@@ -14,7 +14,7 @@
 #   - backup failed     -> nothing was changed, the old version keeps running;
 #   - migrations failed -> the new version is not started, the old one keeps running;
 #   - smoke failed      -> the new version is already started; roll back by hand
-#                          (prod: rollback.sh; staging: deploy.sh staging <older sha>).
+#                          (prod: Deploy prod with the rollback box; staging: deploy.sh staging <older sha>).
 # The prod database can be put back from a backup by hand only, with restore.sh.
 set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
