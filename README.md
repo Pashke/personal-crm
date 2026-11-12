@@ -216,7 +216,8 @@ pnpm db:migrate
 Скрипт `deploy/server-setup/setup.sh` готовит сервер к выкатке:
 
 - ставит Docker из официального репозитория. Порты контейнеров открываются только на 127.0.0.1, снаружи к ним не попасть. Логи контейнеров ограничены по размеру;
-- создаёт пользователя `deploy`: под ним GitHub Actions выкатывает приложение. Пароля и sudo у него нет, только SSH-ключи и доступ к Docker. Доступ к Docker равен правам root, поэтому ключи берегите;
+- создаёт пользователя `deploy`: под ним GitHub Actions выкатывает приложение. Пароля и sudo у него нет, только SSH-ключи и доступ к Docker. Доступ к Docker равен правам root, поэтому ключи берегите. Ещё `deploy` может читать журнал сервера — там логи приложения (см. «Логи»);
+- оставляет логи приложения только в журнале сервера: сервер копирует журнал ещё и в файл `/var/log/syslog`, а этот файл чистится раз в неделю, не глядя на размер. Строки контейнеров приложения туда не попадают — файл `/etc/rsyslog.d/10-personal-crm.conf`. Скрипт сам проверяет, что фильтр работает;
 - создаёт папки приложения: `/home/deploy/personal-crm` (прод) и `/home/deploy/personal-crm-staging` (тест-стенд);
 - ставит nginx: на whobook.ru заглушка, app.whobook.ru передаёт запросы приложению, test-app.whobook.ru — приложению тест-стенда. Пока приложение не запущено, там видна страница «Приложение временно недоступно». http перенаправляется на https;
 - закрывает test-app.whobook.ru логином и паролем. Если пароля ещё нет, спрашивает логин и пароль (пароль не виден на экране, не короче 12 символов). На сервере хранится только хеш пароля;
@@ -364,7 +365,7 @@ ssh crm-deploy personal-crm/deploy/rollback.sh <sha коммита>  # люба�
 
 ```
 ssh crm-deploy personal-crm/deploy/compose.sh prod ps                   # что запущено на проде
-ssh crm-deploy personal-crm/deploy/compose.sh prod logs --tail 100 app  # логи приложения прода
+ssh crm-deploy personal-crm/deploy/logs.sh prod app -n 100             # логи приложения прода
 ssh crm-deploy cat personal-crm/state/current-version                   # какая версия работает на проде
 ssh crm-deploy ls -lh personal-crm/backups                              # бэкапы базы прода
 ssh crm-deploy personal-crm/deploy/backup.sh                            # снять бэкап базы прода сейчас
@@ -373,16 +374,45 @@ ssh crm-deploy personal-crm/deploy/compose.sh prod run --rm seed        # тес
 
 ### Логи
 
-Логи контейнеров читаются через `compose.sh`:
+Логи всех контейнеров — приложения, базы, миграций — пишутся в журнал сервера (journald), и у прода, и у стенда. При выкатке, откате, восстановлении базы или перезапуске контейнер заменяется новым, а его строки остаются в журнале: видно, что было до выкатки. Размер журнала ограничивает сам сервер (до 4 ГБ), самые старые строки он удаляет сам — диск не забивается.
+
+Читать — скриптом `logs.sh`: первый параметр — окружение (`prod` или `staging`), второй — чей лог:
+
+| что указать | чей лог |
+|---|---|
+| `app` | приложение |
+| `postgres` | база |
+| `migrate` | миграции базы, их запускает каждая выкатка |
+| `seed` | тестовые данные |
+| `all` | все контейнеры окружения вместе |
 
 ```
-ssh crm-deploy personal-crm/deploy/compose.sh prod logs --tail 200 app                  # последние 200 строк приложения прода
-ssh crm-deploy personal-crm/deploy/compose.sh prod logs --since 1h postgres             # база прода за последний час
-ssh crm-deploy personal-crm-staging/deploy/compose.sh staging logs --tail 200 app       # приложение стенда
-ssh crm-deploy personal-crm-staging/deploy/compose.sh staging logs --follow app         # стенд в реальном времени (выход — Ctrl+C)
+ssh crm-deploy personal-crm/deploy/logs.sh prod app -n 200                   # последние 200 строк приложения прода
+ssh crm-deploy personal-crm/deploy/logs.sh prod app --since -1h              # приложение прода за последний час (-30min, -2d — так же)
+ssh crm-deploy personal-crm/deploy/logs.sh prod app --since today            # с полуночи (время сервера — московское)
+ssh crm-deploy personal-crm/deploy/logs.sh prod app --since 2026-11-12T18:00 --until 2026-11-12T19:00   # с и по
+ssh crm-deploy personal-crm/deploy/logs.sh prod app --grep Failed            # только строки с этим словом
+ssh crm-deploy personal-crm/deploy/logs.sh prod postgres -n 50               # база прода
+ssh crm-deploy personal-crm/deploy/logs.sh prod migrate -n 50                # миграции последних выкаток
+ssh crm-deploy personal-crm/deploy/logs.sh prod app --follow                 # в реальном времени (выход — Ctrl+C)
+ssh crm-deploy personal-crm-staging/deploy/logs.sh staging app -n 200        # приложение стенда
 ```
 
-Сейчас логи хранятся у каждого контейнера, не больше 3 файлов по 10 МБ, и пропадают вместе с контейнером (при каждой выкатке приложение — новый контейнер).
+В каждой строке — время, имя контейнера (`prod-app-1`, `staging-postgres-1`, `prod-migrate-run-…`) и текст. Без `-n`, `--since` скрипт выдаст все строки с самого начала журнала.
+
+Время и текст пишите без пробелов, как в примерах: команда идёт через ssh, и пробел внутри кавычек ломает её.
+
+Ночной бэкап тоже пишет в журнал:
+
+```
+ssh crm-deploy journalctl -u personal-crm-backup.service --since -3d
+```
+
+Читать журнал может пользователь `deploy`: так настраивает `setup.sh` (см. «Подготовка сервера»). Если `logs.sh` пишет «cannot read the server journal», запустить `setup.sh` ещё раз.
+
+`compose.sh … logs app` тоже работает, но показывает только текущий контейнер — без строк до последней выкатки.
+
+Строк, записанных до перехода на журнал, там нет: тогда логи лежали в файлах контейнера и пропадали вместе с ним.
 
 ## Тест-стенд
 
@@ -469,6 +499,7 @@ ssh -t crm 'sudo bash ~/server-setup/setup.sh <почта> 2>&1 | tee ~/server-s
 ssh crm systemctl list-timers personal-crm-backup.timer      # когда следующий и когда был последний запуск
 ssh crm systemctl status personal-crm-backup.service         # чем закончился последний запуск
 ssh crm-deploy ls -lh personal-crm/backups                   # файлы ..._daily_...dump
+ssh crm-deploy journalctl -u personal-crm-backup.service -n 30   # что бэкап писал (если упал — почему)
 ```
 
 В `status` удачный запуск — `status=0/SUCCESS`, неудачный — `status=1/FAILURE`. Если ночной бэкап упал, никто об этом не сообщит: проверяйте сами.

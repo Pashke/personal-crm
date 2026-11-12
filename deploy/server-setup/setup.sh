@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # One-time server setup for personal-crm:
 #   Docker (container ports only on 127.0.0.1, log size limits),
-#   user "deploy" that runs the app containers (GitHub Actions logs in as this user),
+#   user "deploy" that runs the app containers (GitHub Actions logs in as this user)
+#   and reads the server journal, where the container logs are (deploy/logs.sh),
+#   container logs only in the journal: rsyslog does not copy them to /var/log/syslog,
 #   nginx: a stub page for the landing, the app proxied to its container,
 #   the test stand proxied to its container, behind a login and password (basic auth),
 #   HTTPS certificates (certbot, renewal by systemd timer): one for the landing and the app,
@@ -203,12 +205,17 @@ if ! id "$DEPLOY_USER" >/dev/null 2>&1; then
 else
   info "user $DEPLOY_USER already exists"
 fi
-if id -nG "$DEPLOY_USER" | tr ' ' '\n' | grep -qx docker; then
-  info "$DEPLOY_USER is in the docker group"
-else
-  usermod -aG docker "$DEPLOY_USER"
-  info "added $DEPLOY_USER to the docker group"
-fi
+# docker: runs the app containers. systemd-journal: reads the server journal (reading only), where the
+# containers (deploy/compose.yaml) and the daily backup write their logs; deploy/logs.sh reads it.
+# A new group takes effect from the next login.
+for group in docker systemd-journal; do
+  if id -nG "$DEPLOY_USER" | tr ' ' '\n' | grep -qx "$group"; then
+    info "$DEPLOY_USER is in the $group group"
+  else
+    usermod -aG "$group" "$DEPLOY_USER"
+    info "added $DEPLOY_USER to the $group group"
+  fi
+done
 
 install -d -m 0700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$DEPLOY_HOME/.ssh" "$APP_DIR" "$APP_DIR-staging"
 if [ -f "$SRC_DIR/deploy-authorized_keys" ]; then
@@ -327,12 +334,60 @@ if [ ! -f "$APP_DIR/deploy/backup.sh" ]; then
   info "Until then the daily backup fails."
 fi
 
+# ---------------------------------------------------------------- container logs
+# The containers log to the server journal (journald driver, deploy/compose.yaml), and journald limits
+# the size of the journal. rsyslog copies every journal line to /var/log/syslog, which is rotated weekly
+# whatever its size. Our filter keeps the lines of the app containers out of it: they stay in the journal only.
+log "Container logs: in the journal only, not in /var/log/syslog"
+RSYSLOG_SRC="$SRC_DIR/rsyslog/10-personal-crm.conf"
+RSYSLOG_CONF=/etc/rsyslog.d/10-personal-crm.conf
+if ! command -v rsyslogd >/dev/null 2>&1; then
+  info "rsyslog is not installed: nothing copies the journal to /var/log/syslog"
+else
+  if cmp -s "$RSYSLOG_SRC" "$RSYSLOG_CONF"; then
+    info "$RSYSLOG_CONF is up to date"
+  else
+    install_managed "$RSYSLOG_SRC" "$RSYSLOG_CONF"
+    if is_managed "$RSYSLOG_CONF"; then
+      if ! check="$(rsyslogd -N1 2>&1)"; then
+        printf '%s\n' "$check" >&2
+        rm -f "$RSYSLOG_CONF"
+        die "rsyslog does not accept the configuration with $RSYSLOG_CONF (see above), the file was removed"
+      fi
+      systemctl restart rsyslog
+      info "rsyslog restarted"
+    fi
+  fi
+
+  # Check with two test lines: one named like a container of ours must not reach /var/log/syslog,
+  # an ordinary one must. rsyslog handles them in order, so once the second is there, the first was handled.
+  if is_managed "$RSYSLOG_CONF" && systemctl is-active --quiet rsyslog && [ -f /var/log/syslog ]; then
+    mark="personal-crm-setup-$(date +%s)-$$"
+    logger -t staging-app-setup-check "$mark-dropped: named like a container of personal-crm, must not reach syslog"
+    logger -t personal-crm-setup "$mark-kept: an ordinary line, must reach syslog"
+    for _ in $(seq 1 20); do
+      grep -qF "$mark-kept" /var/log/syslog && break
+      sleep 0.5
+    done
+    grep -qF "$mark-kept" /var/log/syslog \
+      || die "rsyslog check: an ordinary test line did not reach /var/log/syslog in 10 seconds"
+    if grep -qF "$mark-dropped" /var/log/syslog; then
+      die "rsyslog check: a test line named like a container reached /var/log/syslog, the filter does not work"
+    fi
+    info "check: container lines stay out of /var/log/syslog, other lines get there: OK"
+  fi
+fi
+
 # ---------------------------------------------------------------- summary
 log "Summary"
 info "docker:  $(docker --version)"
 info "compose: $(docker compose version --short)"
 info "nginx:   $(nginx -v 2>&1)"
 info "certbot: $(certbot --version 2>&1)"
+# journald's own size limit of the journal; when it is reached, the oldest lines are deleted.
+info "journal: $(journalctl --disk-usage 2>/dev/null || true)"
+limit="$(journalctl -b -u systemd-journald -o cat 2>/dev/null | grep -E '^System Journal .* max ' | tail -n 1 || true)"
+[ -z "$limit" ] || info "journal limit: $limit"
 for name in "$CERT_NAME" "$STAGING_CERT_NAME"; do
   certbot certificates --cert-name "$name" 2>/dev/null | grep -E 'Domains|Expiry' | sed 's/^ */    /' || true
 done
