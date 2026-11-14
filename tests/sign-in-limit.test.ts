@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { Pool } from "pg";
 import { describe, expect, it } from "vitest";
 
 import { requestSignInLink } from "@/app/(auth)/login/actions";
@@ -63,6 +64,26 @@ describe("the email limit", () => {
     expect(emailsTo("anna@example.com")).toHaveLength(3);
   });
 
+  // Every waiting request used to hold a database connection while the one in front of it needed
+  // another: from 10 at once (the pool size) the whole app froze.
+  it("twelve requests for one address at the same moment: three emails, nine «Слишком часто…», the app answers", async () => {
+    const answers = await Promise.all(Array.from({ length: 12 }, () => request("anna@example.com")));
+
+    expect(answers.filter((answer) => answer.sentTo)).toHaveLength(3);
+    expect(answers.filter((answer) => answer.formError)).toEqual(Array(9).fill(tooOften));
+    expect(emailsTo("anna@example.com")).toHaveLength(3);
+    await expect(getDb().execute(sql`select 1`)).resolves.toBeDefined();
+  });
+
+  it("ten requests for ten addresses at the same moment: each address gets its email", async () => {
+    const addresses = Array.from({ length: 10 }, (_, i) => `user${i}@example.com`);
+
+    const answers = await Promise.all(addresses.map((address) => request(address)));
+
+    expect(answers).toEqual(addresses.map((address) => ({ email: address, sentTo: address })));
+    expect(sentEmails).toHaveLength(10);
+  });
+
   it("old rows of the limit are deleted: an address is kept no longer than 10 minutes after its email", async () => {
     await request("ivan@example.com");
     await getDb().execute(sql`update sign_in_emails set sent_at = sent_at - interval '11 minutes'`);
@@ -98,4 +119,30 @@ describe("when the email cannot be sent", () => {
     expect(sentEmails).toHaveLength(1);
     expect((await openLink(link)).path).toBe("/");
   });
+
+  it("Почтовый сервис не ответил: the link of the email that did not go out is not kept", async () => {
+    failEmails();
+
+    expect(await request("anna@example.com")).toEqual(notSent);
+
+    const { rows } = await getDb().execute<{ links: number }>(sql`select count(*)::int as links from verifications`);
+    expect(rows).toEqual([{ links: 0 }]);
+  });
+});
+
+describe("when the database has no free connection", () => {
+  it("a request for a link waits about 10 seconds, then «Не удалось отправить письмо…» instead of hanging", async () => {
+    const pool = (getDb() as unknown as { $client: Pool }).$client;
+    const busy = await Promise.all(Array.from({ length: pool.options.max }, () => pool.connect()));
+    try {
+      const started = Date.now();
+
+      expect(await request("anna@example.com")).toEqual(notSent);
+
+      expect(Date.now() - started).toBeGreaterThanOrEqual(9_000);
+      expect(sentEmails).toHaveLength(0);
+    } finally {
+      for (const connection of busy) connection.release();
+    }
+  }, 20_000);
 });

@@ -8,6 +8,7 @@ import { getDb } from "@/db";
 import { normalizeEmail } from "@/db/email";
 import { signInEmails, verifications } from "@/db/schema";
 import { getAuth } from "@/lib/auth";
+import { createAuth } from "@/lib/create-auth";
 import { describeError } from "@/lib/describe-error";
 import type { SignInFormState } from "@/lib/sign-in-form";
 
@@ -28,8 +29,11 @@ export async function requestSignInLink(_prevState: SignInFormState, formData: F
   const requestHeaders = await headers();
   let outcome: "sent" | "too-often";
   try {
-    // One transaction: if the email fails, nothing below is kept. The previous links stay valid
-    // and the attempt does not count towards the limit.
+    // One transaction: if the email fails, nothing below is kept. The previous links stay valid,
+    // the new link is not stored and the attempt does not count towards the limit.
+    // Everything here, Better Auth included, goes through this transaction's one connection: a request
+    // waiting for its turn holds a connection, so needing a second one froze the app once the
+    // waiting requests took the whole pool.
     outcome = await getDb().transaction(async (tx) => {
       // Requests for one address go one at a time, so two at once cannot both pass the limit.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${email}, 0))`);
@@ -42,9 +46,9 @@ export async function requestSignInLink(_prevState: SignInFormState, formData: F
       // A new link cancels the previous ones of this address.
       await tx.delete(verifications).where(isSignInLinkFor(email));
 
-      // Better Auth stores the link, then waits for the email (sendMagicLink in createAuth).
-      // A failed email throws here and rolls the transaction back.
-      await getAuth().api.signInMagicLink({
+      // Better Auth stores the link in this transaction, then waits for the email (sendMagicLink in
+      // createAuth). A failed email throws here and rolls the transaction back.
+      await createAuth(tx).api.signInMagicLink({
         body: { email, callbackURL: "/", errorCallbackURL: "/login/expired" },
         headers: requestHeaders,
       });

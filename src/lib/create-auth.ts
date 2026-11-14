@@ -1,11 +1,13 @@
 // Better Auth settings in one place. The app calls createAuth() with its own database
-// (src/lib/auth.ts), tests with a test database, the Better Auth CLI with a database without
-// a connection (scripts/better-auth-cli.ts). No `server-only` here: the CLI cannot load such a file.
+// (src/lib/auth.ts) or with an open transaction (requestSignInLink), tests with a test database,
+// the Better Auth CLI with a database without a connection (scripts/better-auth-cli.ts).
+// No `server-only` here: the CLI cannot load such a file.
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { magicLink } from "better-auth/plugins/magic-link";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
+import type { PgDatabase } from "drizzle-orm/pg-core";
 
 import * as schema from "@/db/schema";
 import { sendMail } from "@/lib/mail";
@@ -21,7 +23,8 @@ const DAY_SECONDS = 24 * 60 * 60;
 export const SESSION_TTL_SECONDS = 30 * DAY_SECONDS;
 const SESSION_RENEW_AFTER_SECONDS = DAY_SECONDS;
 
-export type AuthDb = NodePgDatabase<typeof schema>;
+// A database or a transaction in it: Better Auth then reads and writes through that connection.
+export type AuthDb = PgDatabase<NodePgQueryResultHKT, typeof schema>;
 
 type AuthSettings = {
   // Next.js cookies for server actions: sign-out clears the session cookie through them.
