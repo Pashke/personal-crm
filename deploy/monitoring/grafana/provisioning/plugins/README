@@ -1,0 +1,2 @@
+No plugins are provisioned. The folder exists only because Grafana logs an error at every start when
+provisioning/plugins is missing; it reads only *.yaml and *.yml files here, so this file is ignored.

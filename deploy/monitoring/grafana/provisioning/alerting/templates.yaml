@@ -1,6 +1,10 @@
 # The subject and the text of the alert emails, in Russian (contact-points.yaml uses them).
 # Subject: "Тревога: <summary of the rule>" while something is wrong, "Починилось: <summary>" when it is gone.
-# summary and description come from the rules (rules.yaml).
+# summary, description and no_data come from the rules (rules.yaml).
+#
+# No data: when a rule fires because its query returned nothing (NoData) or failed (Error), Grafana sets the
+# annotation grafana_state_reason, and the other annotations still hold the texts of the last evaluation with data.
+# Then the subject gets "(нет данных)" and the body is the rule's no_data text instead of those old numbers.
 apiVersion: 1
 
 templates:
@@ -9,6 +13,7 @@ templates:
     template: |
       {{ define "crm.subject" -}}
       {{ if eq .Status "firing" }}Тревога{{ else }}Починилось{{ end }}: {{ template "crm.summary" . }}
+      {{- if and (eq .Status "firing") (or (eq .CommonAnnotations.grafana_state_reason "NoData") (eq .CommonAnnotations.grafana_state_reason "Error")) }} (нет данных){{ end }}
       {{- end }}
 
       {{ define "crm.summary" -}}
@@ -16,7 +21,8 @@ templates:
       {{- end }}
 
       {{ define "crm.message" -}}
-      {{ range .Alerts.Firing }}{{ .Annotations.description }}
+      {{ range .Alerts.Firing -}}
+      {{ if or (eq .Annotations.grafana_state_reason "NoData") (eq .Annotations.grafana_state_reason "Error") }}{{ .Annotations.no_data }}{{ else }}{{ .Annotations.description }}{{ end }}
       {{ end -}}
       {{ range .Alerts.Resolved }}Тревога «{{ .Annotations.summary }}»{{ with .Labels.site }} ({{ . }}){{ end }} снята: всё снова в порядке.
       {{ end }}
