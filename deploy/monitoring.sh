@@ -66,8 +66,8 @@ found = [t["health"] for t in json.load(sys.stdin)["data"]["activeTargets"] if t
 print(found[0] if found else "missing")
 ' "$1"
 }
-# Number of items in a JSON list.
-json_length() { python3 -c 'import json, sys; print(len(json.load(sys.stdin)))'; }
+# The uid of every alert rule in a JSON list of rules, one per line.
+json_rule_uids() { python3 -c 'import json, sys; [print(r["uid"]) for r in json.load(sys.stdin)]'; }
 
 [ -d "$SRC_DIR" ] || die "$SRC_DIR is missing"
 mkdir -p "$MONITORING_DIR/state"
@@ -166,13 +166,18 @@ else
   info "WARNING: database metrics (postgres-exporter of prod) are $postgres_health. See logs.sh prod postgres-exporter"
 fi
 
-expected_rules="$(grep -c '^ *- uid: ' "$CONFIG_DIR/grafana/provisioning/alerting/rules.yaml")"
-loaded_rules="$(curl -fsS --max-time 10 "${GRAFANA_AS_ADMIN[@]}" "$GRAFANA_URL/api/v1/provisioning/alert-rules" | json_length || echo 0)"
-if [ "$loaded_rules" = "$expected_rules" ]; then
-  info "alert rules in Grafana: $loaded_rules"
-else
-  info "alert rules in Grafana: $loaded_rules, expected $expected_rules"
+# Every rule of rules.yaml must be loaded. Rules made in Grafana itself (by hand or through its API) do not count.
+expected_uids="$(sed -n 's/^ *- uid: *\([A-Za-z0-9_-]*\).*$/\1/p' "$CONFIG_DIR/grafana/provisioning/alerting/rules.yaml" | sort)"
+loaded_uids="$(curl -fsS --max-time 10 "${GRAFANA_AS_ADMIN[@]}" "$GRAFANA_URL/api/v1/provisioning/alert-rules" | json_rule_uids | sort || true)"
+missing_uids="$(comm -23 <(printf '%s\n' "$expected_uids") <(printf '%s\n' "$loaded_uids"))"
+if [ -z "$expected_uids" ]; then
+  info "no alert rules found in rules.yaml"
   problems=1
+elif [ -n "$missing_uids" ]; then
+  info "alert rules of rules.yaml that Grafana has not loaded: $(printf '%s ' $missing_uids)"
+  problems=1
+else
+  info "alert rules of rules.yaml in Grafana: all $(printf '%s\n' "$expected_uids" | wc -l)"
 fi
 if curl -fsS --max-time 10 -o /dev/null "${GRAFANA_AS_ADMIN[@]}" "$GRAFANA_URL/api/dashboards/uid/server"; then
   info "the \"Сервер и приложение\" page: loaded"
