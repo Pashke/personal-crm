@@ -1,0 +1,24 @@
+# The subject and the text of the alert emails, in Russian (contact-points.yaml uses them).
+# Subject: "Тревога: <summary of the rule>" while something is wrong, "Починилось: <summary>" when it is gone.
+# summary and description come from the rules (rules.yaml).
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: personal-crm
+    template: |
+      {{ define "crm.subject" -}}
+      {{ if eq .Status "firing" }}Тревога{{ else }}Починилось{{ end }}: {{ template "crm.summary" . }}
+      {{- end }}
+
+      {{ define "crm.summary" -}}
+      {{ if .CommonAnnotations.summary }}{{ .CommonAnnotations.summary }}{{ else }}{{ .CommonLabels.alertname }}{{ end }}
+      {{- end }}
+
+      {{ define "crm.message" -}}
+      {{ range .Alerts.Firing }}{{ .Annotations.description }}
+      {{ end -}}
+      {{ range .Alerts.Resolved }}Тревога «{{ .Annotations.summary }}»{{ with .Labels.site }} ({{ . }}){{ end }} снята: всё снова в порядке.
+      {{ end }}
+      Смотреть: https://grafana.whobook.ru/d/server
+      {{- end }}

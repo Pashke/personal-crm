@@ -88,6 +88,28 @@ services:
       start_period: 60s
       start_interval: 2s
 
+  # Metrics of the prod database for the monitoring (deploy/monitoring): Prometheus reads them from
+  # 127.0.0.1:9187. Prod only: use_env (deploy/lib.sh) turns the "monitoring" profile on for prod and off
+  # for the test stand. deploy.sh starts it after the app. It is in this project's network, so the database
+  # still has no published port. It connects to the maintenance database "postgres", not to the app's one:
+  # sizes of all databases are visible from there, and dropping the app database (restore.sh) is not
+  # held up by its connection.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: "postgres:5432/postgres?sslmode=disable"
+      DATA_SOURCE_USER: ${POSTGRES_USER:?POSTGRES_USER is not set in .env}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:9187:9187"
+    mem_limit: 48m
+    logging: *logging
+
   # One-off: applies database migrations and exits. deploy.sh runs it before starting a new app version.
   migrate:
     <<: *app-base

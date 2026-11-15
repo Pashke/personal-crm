@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Мониторинг — обзор</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=Oswald:wght@400;500;700&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Values copied from src/app/tokens.css, same variable names */
+:root {
+  --color-forest: #24392f;
+  --color-line-dark: #4d6b5b;
+  --color-cream: #f3ead6;
+  --color-gold: #e6c46a;
+  --color-muted-dark: #d9d1bd;
+  --color-muted-dark-2: #b9c7b8;
+  --color-muted-light: #4a5a50;
+  --color-line-light: #c9bc9f;
+  --color-rust: oklch(0.55 0.15 38);
+  --color-rust-ink: #fbf3e2;
+  --color-rust-light: oklch(0.8 0.1 38);
+
+  --font-display: "Oswald", "Arial Narrow", sans-serif;
+  --font-text: "PT Serif", Georgia, serif;
+  --font-hand: "Caveat", cursive;
+
+  --text-title: 34px;
+  --text-heading: 24px;
+  --text-label: 13px;
+  --text-body: 16px;
+  --text-name: 15px;
+  --text-meta: 13px;
+
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* shadcn/ui roles, as in src/app/globals.css */
+  --background: var(--color-forest);
+  --foreground: var(--color-cream);
+  --popover: var(--color-cream);
+  --popover-foreground: var(--color-forest);
+  --primary: var(--color-rust);
+  --primary-foreground: var(--color-rust-ink);
+  --muted: var(--color-line-dark);
+  --muted-foreground: var(--color-muted-dark-2);
+  --accent: var(--color-gold);
+  --accent-foreground: var(--color-forest);
+  --destructive: var(--color-rust-light);
+  --border: var(--color-line-dark);
+  --input: var(--color-cream);
+}
+@media (min-width: 768px) {
+  :root {
+    --text-title: 44px;
+    --text-heading: 28px;
+    --text-label: 14px;
+    --text-body: 17px;
+    --text-name: 17px;
+    --text-meta: 14px;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-text);
+  font-size: var(--text-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 920px; margin: 0 auto; padding: 40px 16px 80px; }
+header.top { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 500; font-size: var(--text-label); letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+h1 { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; font-size: var(--text-title); line-height: 1.05; margin: 14px 0 14px; }
+h2 { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; font-size: var(--text-heading); line-height: 1.1; margin: 64px 0 18px; display: flex; align-items: baseline; gap: 12px; border-top: 2px solid var(--accent); padding-top: 14px; }
+h2 .num { font-family: var(--font-hand); font-weight: 500; font-size: 30px; color: var(--accent); text-transform: none; }
+h3 { font-family: var(--font-display); font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; font-size: 18px; margin: 28px 0 10px; }
+p { margin: 8px 0; }
+.lead { font-size: 18px; max-width: 700px; }
+.muted { color: var(--muted-foreground); }
+.small { font-size: var(--text-meta); }
+code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.84em; background: color-mix(in srgb, var(--color-line-dark) 45%, transparent); padding: 1px 5px; border-radius: var(--radius-xs); overflow-wrap: anywhere; }
+b { font-weight: 700; }
+ul.points, ol.points { padding-left: 20px; margin: 8px 0; }
+ul.points li, ol.points li { margin: 5px 0; }
+.card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px 22px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); font-size: 14px; }
+.chip.accent { border-color: var(--accent); color: var(--accent); }
+
+/* Screen sketches */
+.screens { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; }
+.screen-title { font-family: var(--font-display); font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; font-size: 15px; color: var(--muted-foreground); margin: 0 0 10px; }
+.device { border: 2px solid var(--accent); border-radius: var(--radius-lg); padding: 5px; }
+.device.narrow { max-width: 440px; }
+.device-in { border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 16px 16px 20px; display: grid; gap: 14px; min-width: 0; }
+.is-new { position: relative; outline: 2px dashed var(--accent); outline-offset: 6px; border-radius: var(--radius-sm); }
+.new-tag { position: absolute; top: -17px; right: 8px; background: var(--accent); color: var(--accent-foreground); font-family: var(--font-display); font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; padding: 1px 8px; border-radius: 999px; z-index: 1; }
+.callouts { margin: 12px 0 0; padding-left: 20px; font-size: 15px; }
+.callouts li { margin: 4px 0; }
+
+/* Browser address bar */
+.urlbar { display: flex; align-items: center; gap: 8px; background: color-mix(in srgb, var(--color-line-dark) 45%, transparent); border-radius: 999px; padding: 6px 14px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: var(--muted-foreground); min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.urlbar .lock { color: var(--accent); }
+
+/* Browser sign-in dialog */
+.dialog { background: var(--popover); color: var(--popover-foreground); border-radius: var(--radius-md); padding: 18px 18px 16px; display: grid; gap: 10px; max-width: 380px; box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.6); }
+.dialog .dt { font-weight: 700; }
+.dialog .dd { font-size: 14px; color: var(--color-muted-light); }
+.dialog .fld { border: 1px solid var(--color-line-light); border-radius: var(--radius-sm); padding: 7px 10px; font-size: 14px; color: var(--color-muted-light); background: #fff; }
+.dialog .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.dialog .b { font-family: var(--font-display); font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; padding: 7px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--color-muted-light); }
+.dialog .b.main { background: var(--popover-foreground); color: var(--popover); border-color: var(--popover-foreground); }
+
+/* Grafana page sketch */
+.g-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; }
+.g-title { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; font-size: 22px; line-height: 1.1; }
+.g-range { font-size: 13px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 10px; white-space: nowrap; }
+.g-sec { font-family: var(--font-display); font-weight: 500; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-top: 4px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; min-width: 0; }
+.tile .k { font-size: 13px; color: var(--muted-foreground); }
+.tile .v { font-family: var(--font-display); font-weight: 500; font-size: 24px; line-height: 1.15; }
+.tile .v.ok { color: var(--accent); }
+.tile .s { font-size: 12px; color: var(--muted-foreground); }
+.chart-ph { border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 10px 12px; min-height: 64px; display: flex; flex-direction: column; justify-content: space-between; font-size: 13px; color: var(--muted-foreground); }
+.chart-ph b { color: var(--foreground); font-weight: 400; }
+
+/* Letters */
+.letters { display: grid; gap: 14px; }
+.letter { background: var(--popover); color: var(--popover-foreground); border-radius: var(--radius-md); padding: 14px 16px; display: grid; gap: 6px; min-width: 0; }
+.letter .from { font-size: 13px; color: var(--color-muted-light); overflow-wrap: anywhere; }
+.letter .subj { font-weight: 700; font-size: 16px; }
+.letter .subj.fire::before { content: "● "; color: var(--color-rust); }
+.letter .subj.ok::before { content: "● "; color: #3f7a4f; }
+.letter .body { font-size: 14px; }
+.letter .body a { color: var(--color-rust); }
+
+/* GitHub Actions run */
+.run { display: grid; gap: 8px; }
+.job { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 15px; min-width: 0; }
+.job .st { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.job .nm { flex: 1; min-width: 0; }
+.job .tm { font-size: 13px; color: var(--muted-foreground); white-space: nowrap; }
+.job-arrow { color: var(--muted-foreground); font-size: 13px; padding-left: 14px; }
+
+/* Rules: full-width bands, one under another */
+.rules { display: grid; gap: 12px; }
+.rule { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-md); padding: 14px 18px; }
+.rule .h { font-family: var(--font-display); font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; font-size: 16px; color: var(--accent); margin-bottom: 6px; }
+.example { font-size: 15px; background: color-mix(in srgb, var(--color-line-dark) 35%, transparent); padding: 8px 12px; margin-top: 10px; border-radius: var(--radius-sm); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); margin: 10px 0; }
+table.data { border-collapse: collapse; width: 100%; font-size: 15px; }
+table.data th, table.data td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.data th { color: var(--muted-foreground); font-family: var(--font-display); font-weight: 500; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
+table.data tr:last-child td { border-bottom: 0; }
+table.data td.acc { color: var(--accent); }
+
+/* Checklist */
+.prep { border: 1px dashed var(--accent); border-radius: var(--radius-md); padding: 14px 18px; font-size: 15px; }
+.prep p { margin: 6px 0; }
+.check-group { margin-bottom: 18px; }
+.check { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); margin: 6px 0; cursor: pointer; }
+.check:hover { border-color: var(--muted-foreground); }
+.check input { margin-top: 6px; accent-color: var(--color-gold); width: 16px; height: 16px; flex-shrink: 0; }
+.check .sc { font-weight: 700; }
+.check .st { font-size: 15px; color: var(--muted-foreground); }
+.check .st .arrow-t { color: var(--accent); font-weight: 700; }
+.check .flag { display: inline-block; font-family: var(--font-display); font-weight: 500; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 999px; padding: 0 8px; margin-left: 8px; vertical-align: 2px; white-space: nowrap; }
+.check .flag.yes { border: 1px solid var(--accent); color: var(--accent); }
+.check .flag.slow { border: 1px solid var(--muted-foreground); color: var(--muted-foreground); }
+.check:has(input:checked) .sc { color: var(--accent); }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.box-card h3 { margin-top: 0; }
+.q { padding: 12px 0; border-top: 1px solid var(--border); }
+.q:first-child { border-top: 0; padding-top: 0; }
+.q p:first-child { margin-top: 0; }
+footer { margin-top: 64px; font-size: 13px; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 14px; }
+
+@media (max-width: 720px) {
+  h2 .num { font-size: 26px; }
+  .two { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="top"><span class="dot"></span>Личная CRM · обзор фичи</header>
+<h1>Мониторинг сервера</h1>
+<p class="lead">Графики состояния сервера по адресу grafana.whobook.ru и письма на вашу почту, когда что-то сломалось и когда починилось. Плюс внешняя проверка снаружи, на случай если упадёт весь сервер.</p>
+<div class="chips">
+  <span class="chip accent">Спроектирована, ещё не сделана</span>
+  <span class="chip">Задачи: 0 из 34</span>
+  <span class="chip">Сценариев: 35, проверка руками на сервере</span>
+  <span class="chip">Изменение <code>monitoring</code></span>
+</div>
+
+<!-- 1 -->
+<h2><span class="num">1</span>Коротко</h2>
+<ul class="points">
+  <li>На сервере появится Grafana (программа для графиков и тревог) и то, что собирает для неё цифры: о сервере, о базе прода, о сайтах и сертификатах.</li>
+  <li>Grafana открывается по адресу grafana.whobook.ru, по своему логину и паролю. Внутри одна готовая страница «Сервер и приложение».</li>
+  <li>Письма приходят по семи тревогам: сайт или стенд не отвечает, бэкап не снялся, сертификат скоро истечёт, диск, память, процессор, база прода. Когда проблема ушла, приходит письмо «Починилось».</li>
+  <li>Внешний сервис UptimeRobot раз в 5 минут открывает прод снаружи. Он напишет, даже если сервер выключен целиком.</li>
+  <li>Мониторинг берёт не больше 600 МБ памяти (жёсткие лимиты), обычно около 300–400 МБ. Сейчас на сервере свободно около 1 ГБ.</li>
+  <li>Приложение и база не меняются: ни экранов, ни таблиц.</li>
+  <li>Статус: <b>спроектирована</b>. Задач 34, отмечено 0. Автотестов (программ, которые сами проходят сценарий) не будет: по правилам проекта сервер и выкатка проверяются настоящей выкаткой. Поэтому у каждого из 35 сценариев есть проверка руками на сервере.</li>
+</ul>
+
+<!-- 2 -->
+<h2><span class="num">2</span>Что появится на экранах</h2>
+<p class="muted small">Наброски, не точные макеты. Всё здесь новое и обведено пунктиром. Числа выдуманы, но правдоподобны. В приложении CRM ничего не меняется.</p>
+
+<div class="screens">
+
+  <div>
+    <p class="screen-title">Вход в Grafana</p>
+    <div class="device narrow"><div class="device-in">
+      <div class="urlbar"><span class="lock">🔒</span>grafana.whobook.ru</div>
+      <div class="is-new"><span class="new-tag">новое</span>
+        <div class="dialog">
+          <div class="dt">Вход</div>
+          <div class="dd">https://grafana.whobook.ru просит войти</div>
+          <div class="fld">Имя пользователя</div>
+          <div class="fld">Пароль</div>
+          <div class="btns"><span class="b">Отмена</span><span class="b main">Войти</span></div>
+        </div>
+      </div>
+    </div></div>
+    <ul class="callouts">
+      <li>Это окно самого браузера, как на тест-стенде. Логин и пароль свои, не от стенда: их спросит <code>setup.sh</code>, когда вы будете его запускать.</li>
+      <li>«Отмена» или неверный пароль: ошибка 401, от Grafana ничего не видно.</li>
+      <li>Верный пароль: сразу открывается Grafana, второй раз пароль не спрашивается.</li>
+    </ul>
+  </div>
+
+  <div>
+    <p class="screen-title">Grafana: страница «Сервер и приложение»</p>
+    <div class="device"><div class="device-in">
+      <div class="urlbar"><span class="lock">🔒</span>grafana.whobook.ru · Сервер и приложение</div>
+      <div class="is-new"><span class="new-tag">новое</span>
+        <div style="display:grid;gap:12px">
+          <div class="g-bar"><span class="g-title">Сервер и приложение</span><span class="g-range">Последний час ⌄</span></div>
+
+          <div class="g-sec">Сайты</div>
+          <div class="tiles">
+            <div class="tile"><div class="k">Прод</div><div class="v ok">Работает</div><div class="s">/health за 48 мс</div></div>
+            <div class="tile"><div class="k">Тест-стенд</div><div class="v ok">Работает</div><div class="s">/health за 52 мс</div></div>
+            <div class="tile"><div class="k">Сертификаты, дней осталось</div><div class="v">62 · 87 · 90</div><div class="s">app · test-app · grafana</div></div>
+          </div>
+
+          <div class="g-sec">Сервер</div>
+          <div class="tiles">
+            <div class="chart-ph"><b>Процессор</b><span>график, % · сейчас 4%</span></div>
+            <div class="chart-ph"><b>Свободная память</b><span>график, МБ · сейчас 640 из 1 800</span></div>
+            <div class="chart-ph"><b>Диск</b><span>график, % · сейчас 12%</span></div>
+          </div>
+
+          <div class="g-sec">База прода и бэкап</div>
+          <div class="tiles">
+            <div class="tile"><div class="k">Размер базы</div><div class="v">14 МБ</div></div>
+            <div class="tile"><div class="k">Подключений</div><div class="v">3</div></div>
+            <div class="tile"><div class="k">Ночной бэкап</div><div class="v">16 ч назад</div><div class="s">сегодня в 03:00</div></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <ul class="callouts">
+      <li>Подписи по-русски. Период можно сменить, например на «последние 24 часа»: данные хранятся 30 дней.</li>
+      <li>Состав панелей взят из требований. Как именно они расставлены, решится при реализации.</li>
+      <li>Grafana выглядит по-своему, не как CRM. На наброске показано только, что на странице будет.</li>
+    </ul>
+  </div>
+
+  <div>
+    <p class="screen-title">Письма на вашу почту</p>
+    <div class="device"><div class="device-in">
+      <div class="is-new"><span class="new-tag">новое</span>
+        <div class="letters">
+          <div class="letter">
+            <div class="from">Личная CRM: мониторинг &lt;noreply@mail.crm.whobook.ru&gt; · 14:07</div>
+            <div class="subj fire">Тревога: тест-стенд не отвечает</div>
+            <div class="body">https://test-app.whobook.ru/health не отвечает уже 3 минуты.<br>Смотреть: <a>grafana.whobook.ru → Сервер и приложение</a></div>
+          </div>
+          <div class="letter">
+            <div class="from">Личная CRM: мониторинг &lt;noreply@mail.crm.whobook.ru&gt; · 14:12</div>
+            <div class="subj ok">Починилось: тест-стенд не отвечает</div>
+            <div class="body">Тест-стенд снова отвечает.</div>
+          </div>
+          <div class="letter">
+            <div class="from">Личная CRM: мониторинг &lt;noreply@mail.crm.whobook.ru&gt; · 05:01</div>
+            <div class="subj fire">Тревога: ночной бэкап не снялся</div>
+            <div class="body">Последний удачный ночной бэкап: 13 ноября в 03:00.</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <ul class="callouts">
+      <li>Тема всегда начинается с «Тревога:» или «Починилось:». В тексте сказано, что случилось и где смотреть. Точные слова писем решатся при реализации.</li>
+      <li>Адрес отправителя тот же, что у писем для входа. Ключ Resend отдельный, для мониторинга.</li>
+      <li>Ваша почта для тревог хранится только на сервере, в git её нет: репозиторий публичный.</li>
+    </ul>
+  </div>
+
+  <div>
+    <p class="screen-title">GitHub: запуск Deploy prod</p>
+    <div class="device"><div class="device-in">
+      <div class="run">
+        <div class="job"><span class="st">✓</span><span class="nm">Deploy to prod</span><span class="tm">1 мин 40 с</span></div>
+        <div class="job-arrow">↓ потом, даже если выкатка красная</div>
+        <div class="is-new"><span class="new-tag">новое</span>
+          <div class="job"><span class="st">✓</span><span class="nm">Update monitoring</span><span class="tm">45 с</span></div>
+        </div>
+        <div class="job"><span class="st">✓</span><span class="nm">Keep the 10 newest builds in GHCR</span><span class="tm">20 с</span></div>
+      </div>
+    </div></div>
+    <ul class="callouts">
+      <li>Мониторинг обновляется только кнопкой Deploy prod. Выкатка на тест-стенд после merge его не трогает.</li>
+      <li>Если шаг мониторинга красный, в его логе написана причина. Приложение при этом не откатывается.</li>
+    </ul>
+  </div>
+
+</div>
+
+<!-- 3 -->
+<h2><span class="num">3</span>Как это работает</h2>
+<div class="rules">
+
+  <div class="rule">
+    <div class="h">Кто за чем следит</div>
+    <p>Prometheus (программа, которая собирает и хранит цифры) раз в 30 секунд опрашивает сборщиков. Grafana раз в минуту проверяет по этим цифрам правила тревог и рисует графики.</p>
+    <div class="tablewrap"><table class="data">
+      <tr><th>Что</th><th>Как проверяется</th></tr>
+      <tr><td>Прод</td><td>открывается https://app.whobook.ru/health, как у посетителя: адрес, сертификат, nginx, приложение и база разом</td></tr>
+      <tr><td>Тест-стенд</td><td>тот же <code>/health</code>, но запросом с самого сервера: так стенд пускает без пароля</td></tr>
+      <tr><td>Сертификаты</td><td>сколько дней осталось у трёх: whobook.ru + app.whobook.ru (общий), test-app.whobook.ru, grafana.whobook.ru</td></tr>
+      <tr><td>Сервер</td><td>процессор, свободная память, заполненность диска</td></tr>
+      <tr><td>База прода</td><td>отвечает ли, размер, сколько подключений. Только прод: на стенде остановку базы поймает проверка стенда</td></tr>
+      <tr><td>Ночной бэкап</td><td>время самого нового готового файла ночного бэкапа. Его записывает сам бэкап после удачного снятия</td></tr>
+    </table></div>
+  </div>
+
+  <div class="rule">
+    <div class="h">Когда приходит письмо</div>
+    <p>Условие должно держаться какое-то время подряд, чтобы короткие всплески не будили почту.</p>
+    <div class="tablewrap"><table class="data">
+      <tr><th>Тревога</th><th>Условие</th><th>Сколько ждать</th></tr>
+      <tr><td>Прод или тест-стенд не отвечает</td><td><code>/health</code> отвечает не 200</td><td class="acc">3 минуты подряд</td></tr>
+      <tr><td>Ночной бэкап не снялся</td><td>удачного ночного бэкапа нет больше 26 часов</td><td class="acc">сразу</td></tr>
+      <tr><td>Сертификат скоро истечёт</td><td>осталось меньше 14 дней</td><td class="acc">сразу</td></tr>
+      <tr><td>Диск почти заполнен</td><td>занято больше 80%</td><td class="acc">10 минут подряд</td></tr>
+      <tr><td>Мало памяти</td><td>свободно меньше 10% (около 180 МБ)</td><td class="acc">10 минут подряд</td></tr>
+      <tr><td>Процессор загружен</td><td>больше 90%</td><td class="acc">15 минут подряд</td></tr>
+      <tr><td>База прода не отвечает</td><td>сборщик не может достучаться до базы</td><td class="acc">2 минуты подряд</td></tr>
+    </table></div>
+    <div class="example">Выкатка на стенд: приложение перезапускается и 40 секунд не отвечает → письма нет.<br>Стенд остановлен и лежит 4 минуты → на третьей минуте письмо «Тревога: тест-стенд не отвечает».</div>
+  </div>
+
+  <div class="rule">
+    <div class="h">Ночной бэкап: почему 26 часов</div>
+    <p>Бэкап снимается каждый день в 03:00 по Москве. 24 часа между бэкапами плюс 2 часа запаса.</p>
+    <div class="example">13 ноября в 03:00 бэкап снялся, 14 ноября в 03:00 упал → 14 ноября около 05:00 приходит письмо «последний удачный 13 ноября в 03:00».<br>Сняли бэкап вручную через <code>backup.sh</code> → «Починилось».</div>
+  </div>
+
+  <div class="rule">
+    <div class="h">Сертификат: почему 14 дней</div>
+    <p>certbot (программа, которая продлевает сертификаты) пытается продлить за 30 дней до конца. Если осталось меньше 14, значит, продление не удаётся уже больше двух недель и пора разбираться. Let's Encrypt такие письма больше не шлёт, поэтому пишет мониторинг.</p>
+  </div>
+
+  <div class="rule">
+    <div class="h">«Починилось» и повтор раз в сутки</div>
+    <p>Когда условие тревоги перестало выполняться, приходит письмо «Починилось: …» с тем же названием. Пока не починилось, письмо повторяется раз в сутки и не чаще.</p>
+    <div class="example">Диск занят на 85% с понедельника 10:00 → письмо в понедельник в 10:10, повтор во вторник около 10:10, и так каждый день. Почистили диск в среду → письмо «Починилось».</div>
+  </div>
+
+  <div class="rule">
+    <div class="h">Тишина — тоже тревога</div>
+    <p>Если сборщик цифр замолчал или упал сам Prometheus, у правил нет данных. Это тоже повод для письма с пометкой «нет данных»: тревога не молчит молча. Ждёт столько же, сколько само правило.</p>
+    <div class="example">Остановился сборщик цифр сервера → минут через 10–15 письма о диске, памяти, процессоре и бэкапе с пометкой «нет данных».</div>
+  </div>
+
+  <div class="rule">
+    <div class="h">Чего мониторинг на сервере не заметит</div>
+    <p>Если упадёт сама Grafana, писем с сервера не будет. Если упадёт весь сервер, мониторинг ляжет вместе с ним. Поэтому есть внешняя проверка: UptimeRobot снаружи раз в 5 минут открывает https://app.whobook.ru/health и пишет вам, если ответ не 200. Тест-стенд он не проверяет: стенд закрыт паролем.</p>
+  </div>
+
+  <div class="rule">
+    <div class="h">Вход: пароль спрашивает nginx</div>
+    <p>nginx (программа на сервере, которая принимает все запросы из интернета) спрашивает логин и пароль и только потом пускает к Grafana, сообщая ей, кто вошёл. Сама Grafana страницу входа не показывает. Её части снаружи напрямую не видны: у сервера открыты только порты 22, 80 и 443, как сейчас.</p>
+  </div>
+
+  <div class="rule">
+    <div class="h">Память и диск не отнимаются у прода</div>
+    <p>У каждого контейнера мониторинга жёсткий лимит памяти. Упрётся в лимит — перезапустится только он, прод не пострадает.</p>
+    <div class="tablewrap"><table class="data">
+      <tr><th>Часть</th><th>Лимит памяти</th></tr>
+      <tr><td>Grafana</td><td>256 МБ</td></tr>
+      <tr><td>Prometheus</td><td>192 МБ</td></tr>
+      <tr><td>Сборщик цифр сервера</td><td>48 МБ</td></tr>
+      <tr><td>Проверка сайтов и сертификатов</td><td>48 МБ</td></tr>
+      <tr><td>Сборщик цифр базы прода</td><td>48 МБ</td></tr>
+      <tr><td><b>Всего</b></td><td class="acc"><b>592 МБ</b></td></tr>
+    </table></div>
+    <p>Цифры хранятся 30 дней и занимают не больше 1 ГБ диска. Более старые удаляются сами.</p>
+  </div>
+
+  <div class="rule">
+    <div class="h">Обновление вместе с Deploy prod</div>
+    <ol class="points">
+      <li>Вы запускаете Deploy prod. Сначала выкатывается приложение, как сейчас.</li>
+      <li>Потом шаг «Update monitoring». Он идёт, даже если выкатка красная или это откат: тревоги нужны как раз тогда.</li>
+      <li>Шаг проверяет настройки до того, как что-то менять. Нет настроек мониторинга на сервере или настройки с ошибкой → шаг красный, работающий мониторинг не тронут.</li>
+      <li>В конце шаг проверяет, что Grafana и Prometheus отвечают и все сборщики на связи.</li>
+    </ol>
+  </div>
+
+  <div class="rule">
+    <div class="h">Плановые работы дают письма</div>
+    <p>Восстановление базы и пересоздание базы стенда останавливают приложение, поэтому придёт тревога. Это ожидаемо. В README будет, как заглушить тревогу в Grafana на время работ.</p>
+  </div>
+
+</div>
+
+<!-- 5 -->
+<h2><span class="num">4</span>Как проверить руками</h2>
+<p class="muted small">Раздела про модель данных нет: база не меняется.</p>
+<div class="prep">
+  <p><b>Подготовка.</b> Всё проверяется на настоящем сервере после merge. Порядок такой:</p>
+  <ol class="points">
+    <li>Вы создаёте ключ Resend для мониторинга и дописываете строки в <code>.env</code> мониторинга. Команды будут в README.</li>
+    <li>Запускаете <code>setup.sh</code> через sudo. Он подключит адрес grafana.whobook.ru, получит сертификат и спросит пароль для Grafana.</li>
+    <li>Запускаете Deploy prod.</li>
+  </ol>
+  <p>Проверки с пометкой «ваше да»: в них что-то ненадолго останавливается, агент делает их только после вашего согласия. «Через сутки» — их результат виден на следующий день. Галочки на этой странице не сохраняются.</p>
+</div>
+
+<div class="check-group">
+  <h3>Вход в Grafana</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Без пароля</div><div class="st">Открыть https://grafana.whobook.ru → в окне входа нажать «Отмена» <span class="arrow-t">→</span> ошибка 401, ни графиков, ни названий страниц.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Неверный пароль</div><div class="st">Ввести неверный логин или пароль <span class="arrow-t">→</span> 401, Grafana не открылась.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Верный пароль</div><div class="st">Ввести свой логин и пароль <span class="arrow-t">→</span> Grafana открылась без второго окна входа. Можно открыть любую страницу и заглушить тревогу.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Адрес по http</div><div class="st">Открыть http://grafana.whobook.ru <span class="arrow-t">→</span> адрес сменился на https.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Проверка портов снаружи</div><div class="st">Проверить порты сервера с другого компьютера <span class="arrow-t">→</span> открыты только 22, 80 и 443. Порты Grafana, Prometheus и сборщиков не отвечают.</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Страница «Сервер и приложение»</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Страница с настоящими данными</div><div class="st">Открыть страницу <span class="arrow-t">→</span> на каждом графике данные за последний час. Свободная память, диск, дни до конца сертификатов и время последнего бэкапа совпадают с проверкой на сервере.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Данные за прошлые дни<span class="flag slow">через сутки</span></div><div class="st">Выбрать период «последние 24 часа» <span class="arrow-t">→</span> графики без пропусков, кроме времени, когда сервер был выключен.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Прод под наблюдением</div><div class="st">Посмотреть проверку прода <span class="arrow-t">→</span> она зелёная, правило смотрит на https://app.whobook.ru/health.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Сертификаты в порядке</div><div class="st">Сравнить дни сертификатов на странице со сроками на сервере <span class="arrow-t">→</span> совпадают, писем нет.</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Сайт не отвечает и «Починилось»</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Тест-стенд остановлен<span class="flag yes">ваше да</span></div><div class="st">Остановить приложение стенда на 5 минут <span class="arrow-t">→</span> в течение 5 минут письмо «Тревога: тест-стенд не отвечает».</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Тест-стенд снова работает<span class="flag yes">ваше да</span></div><div class="st">Запустить приложение стенда <span class="arrow-t">→</span> в течение 5 минут письмо «Починилось: тест-стенд не отвечает».</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Выкатка</div><div class="st">Обычная выкатка на стенд и Deploy prod <span class="arrow-t">→</span> писем нет.</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Ночной бэкап</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Первый запуск мониторинга</div><div class="st">Сразу после первого Deploy prod с мониторингом <span class="arrow-t">→</span> письма о бэкапе нет, на странице время последнего ночного бэкапа.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Бэкап не снялся</div><div class="st">Подменить для мониторинга время бэкапа на двое суток назад <span class="arrow-t">→</span> письмо «Тревога: ночной бэкап не снялся» с временем последнего удачного.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Бэкап снова снялся</div><div class="st">Снять бэкап вручную через <code>backup.sh</code> <span class="arrow-t">→</span> письмо «Починилось: ночной бэкап не снялся».</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Пороги: сертификат, диск, память, процессор, база</h3>
+  <p class="small muted">Вызвать эти тревоги по-настоящему опасно: не забивать же диск прода. Поэтому делается временная копия правила с порогом, который уже выполняется. Письмо пришло — копию удаляем.</p>
+  <label class="check"><input type="checkbox"><div><div class="sc">Сертификату осталось меньше 14 дней</div><div class="st">Копия правила с порогом «меньше 90 дней» <span class="arrow-t">→</span> письмо «Тревога: сертификат скоро истечёт» с адресом сайта и числом дней.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Диск заполнен</div><div class="st">Копия с порогом «больше 5%» <span class="arrow-t">→</span> письмо «Тревога: диск почти заполнен» с процентом.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Мало памяти</div><div class="st">Копия с порогом «свободно меньше 99%» <span class="arrow-t">→</span> письмо «Тревога: мало памяти» со свободной памятью в мегабайтах.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Процессор загружен</div><div class="st">Копия с порогом «больше 0%» <span class="arrow-t">→</span> письмо «Тревога: процессор загружен» с процентом.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Короткий всплеск</div><div class="st">За время выкаток процессор ненадолго загружен на 100% <span class="arrow-t">→</span> письма о процессоре нет.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">База прода не отвечает</div><div class="st">Копия с обратным условием «база отвечает» <span class="arrow-t">→</span> письмо «Тревога: база прода не отвечает».</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Тишина и повтор</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Сборщик показателей остановлен<span class="flag yes">ваше да</span></div><div class="st">Остановить сборщик цифр сервера на 16 минут <span class="arrow-t">→</span> письма о диске, памяти, процессоре и бэкапе с пометкой «нет данных». Запустить <span class="arrow-t">→</span> «Починилось».</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Хранилище показателей остановлено<span class="flag yes">ваше да</span></div><div class="st">Остановить Prometheus на 16 минут <span class="arrow-t">→</span> письма с пометкой «нет данных».</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Проблема не уходит<span class="flag slow">через сутки</span></div><div class="st">Временное правило, которое всегда срабатывает, оставить на 25 часов <span class="arrow-t">→</span> ровно два письма с разницей в сутки. Потом правило удалить.</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Письма</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Письмо пришло</div><div class="st">По любому письму из проверок выше <span class="arrow-t">→</span> от <code>noreply@mail.crm.whobook.ru</code>, тема начинается с «Тревога:», в тексте что случилось и где.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Нет личных данных в репозитории</div><div class="st">Поискать в файлах репозитория <span class="arrow-t">→</span> нет вашей почты, ключа Resend и паролей мониторинга.</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Внешняя проверка</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Сайт недоступен снаружи</div><div class="st">В UptimeRobot временно добавить проверку несуществующего адреса <span class="arrow-t">→</span> письмо о недоступности → удалить её <span class="arrow-t">→</span> основная проверка прода зелёная.</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Память и диск</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Лимиты памяти</div><div class="st">Посмотреть контейнеры мониторинга <span class="arrow-t">→</span> у каждого лимит, сумма не больше 600 МБ, прод и стенд работают как раньше.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Место на диске</div><div class="st">Посмотреть настройки Prometheus <span class="arrow-t">→</span> хранит 30 дней и не больше 1 ГБ. Дождаться 30 дней не нужно: проверяется настройка.</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Обновление при Deploy prod</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Удачное обновление</div><div class="st">Запустить Deploy prod <span class="arrow-t">→</span> после выкатки шаг «Update monitoring» зелёный, Grafana открывается, все сборщики отвечают.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Мониторинг не запустился</div><div class="st">Запустить обновление мониторинга из временной копии с испорченными настройками <span class="arrow-t">→</span> красный, в логе причина, настоящий мониторинг и прод работают.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Нет настроек мониторинга</div><div class="st">То же из временной копии без <code>.env</code> <span class="arrow-t">→</span> красный, сказано, чего нет, работающий мониторинг не остановлен.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Выкатка приложения упала</div><div class="st">Нарочно ронять выкатку прода не будем. Проверяется условие шага в workflow, а по-настоящему — при первой красной выкатке: мониторинг должен обновиться.</div></div></label>
+  <label class="check"><input type="checkbox"><div><div class="sc">Выкатка на тест-стенд</div><div class="st">Сравнить время создания контейнеров мониторинга до и после Deploy staging <span class="arrow-t">→</span> одинаковое.</div></div></label>
+</div>
+
+<div class="check-group">
+  <h3>Логи</h3>
+  <label class="check"><input type="checkbox"><div><div class="sc">Чтение логов Grafana</div><div class="st"><code>ssh crm-deploy personal-crm-monitoring/deploy/logs.sh monitoring grafana -n 50</code> <span class="arrow-t">→</span> последние строки Grafana, в том числе до последнего обновления.</div></div></label>
+</div>
+
+<!-- 6 -->
+<h2><span class="num">5</span>Что агент решил сам</h2>
+<div class="two">
+  <div class="card box-card">
+    <h3>Продуктовые — стоит просмотреть</h3>
+    <ul class="points small">
+      <li>Пороги и время ожидания тревог — вся таблица «Когда приходит письмо».</li>
+      <li>Повтор письма раз в сутки, пока не починилось.</li>
+      <li>Тема писем «Тревога: …» и «Починилось: …», отправитель «Личная CRM: мониторинг».</li>
+      <li>Пароль Grafana свой, не от стенда. Входите с полными правами: можно заглушить тревогу.</li>
+      <li>Мониторинг обновляется только кнопкой Deploy prod, а не после каждого merge.</li>
+      <li>Внешняя проверка — UptimeRobot, только прод, раз в 5 минут.</li>
+      <li>На стенде нет отдельной тревоги про базу: её поймает «тест-стенд не отвечает».</li>
+      <li>Лендинг whobook.ru отдельно не проверяется, только его сертификат (он общий с app).</li>
+      <li>Данные хранятся 30 дней.</li>
+    </ul>
+  </div>
+  <div class="card box-card">
+    <h3>Технические — на экраны не влияют</h3>
+    <ul class="points small">
+      <li>Мониторинг — отдельный проект Docker в своей папке со своими настройками: его поломка не трогает приложение.</li>
+      <li>Все части мониторинга слушают только сам сервер, наружу выходит только nginx.</li>
+      <li>Сборщик цифр базы живёт рядом с базой прода и берёт тот же пароль: второй копии пароля нет.</li>
+      <li>Тревоги и письма шлёт сама Grafana, без отдельной программы для рассылки.</li>
+      <li>Время бэкапа берётся из самого свежего готового файла бэкапа. Мониторинг записывает его и при первом запуске, поэтому в первый день не будет ложного письма.</li>
+      <li>При каждом обновлении настройки кладутся в новую папку, и контейнеры переключаются на неё разом: так ничего не пропадает на полпути.</li>
+      <li>Версии программ — последние стабильные, проверяются при реализации.</li>
+      <li>До merge настройки проверяются локально в Docker, письма — через локальную почтовую заглушку Mailpit.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 7 -->
+<h2><span class="num">6</span>Что осталось неясным</h2>
+<div class="card">
+  <p>Открытых вопросов нет. Ответы владельца от 14 ноября:</p>
+  <ul class="points small">
+    <li>Присмотр за самой Grafana (сигнал «я жив» во внешний сервис) — не нужен.</li>
+    <li>Шаг в GitHub называется «Update monitoring», как остальные шаги Deploy prod.</li>
+    <li>Условия бесплатного UptimeRobot — проверить при регистрации.</li>
+  </ul>
+</div>
+
+<footer>Собрано по <code>openspec/changes/monitoring/</code> (proposal, specs, design, tasks). Изменение ещё не реализовано, кода нет. Страница только показывает, ничего не меняет.</footer>
+</div>
+</body>
+</html>

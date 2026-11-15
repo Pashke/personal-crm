@@ -1,0 +1,11 @@
+# The pages of Grafana come from the JSON files in deploy/monitoring/grafana/dashboards.
+# Changed in Grafana itself, they cannot be saved: change the file instead (PR, then Deploy prod).
+apiVersion: 1
+
+providers:
+  - name: personal-crm
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/monitoring/grafana/dashboards

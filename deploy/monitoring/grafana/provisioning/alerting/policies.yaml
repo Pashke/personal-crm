@@ -1,0 +1,11 @@
+# How alerts become emails: every alert goes to the owner's email (contact-points.yaml).
+# One email per alert name; while the alert keeps firing, the email is repeated once a day.
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: owner-email
+    group_by: ["alertname"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 24h

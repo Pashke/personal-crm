@@ -6,12 +6,14 @@
 #   container logs only in the journal: rsyslog does not copy them to /var/log/syslog,
 #   nginx: a stub page for the landing, the app proxied to its container,
 #   the test stand proxied to its container, behind a login and password (basic auth),
+#   Grafana of the monitoring proxied to its container, behind its own login and password,
 #   HTTPS certificates (certbot, renewal by systemd timer): one for the landing and the app,
-#   a separate one for the test stand,
+#   separate ones for the test stand and for Grafana,
+#   the folder of the monitoring (its containers are started by Deploy prod, deploy/monitoring.sh),
 #   the daily backup of the prod database at 03:00 Moscow time (systemd timer personal-crm-backup.timer).
 # Safe to run again: finished steps are skipped, files not created by this script are not touched.
 #
-# Usage (as root, in a terminal: without a test stand password yet, it asks for one):
+# Usage (as root, in a terminal: without a test stand or Grafana password yet, it asks for one):
 #   bash setup.sh <letsencrypt-email>
 # SSH keys for user deploy are taken from deploy-authorized_keys next to this script
 # (uploaded separately, not stored in git). Without that file existing keys are kept.
@@ -20,15 +22,21 @@ set -Eeuo pipefail
 LANDING_DOMAIN="whobook.ru"
 APP_DOMAIN="app.whobook.ru"
 STAGING_DOMAIN="test-app.whobook.ru"
+GRAFANA_DOMAIN="grafana.whobook.ru"
 DEPLOY_USER="deploy"
 DEPLOY_HOME="/home/$DEPLOY_USER"
 APP_DIR="$DEPLOY_HOME/personal-crm"
+# The monitoring: its .env, settings and the time of the newest backup (MONITORING_DIR in deploy/lib.sh).
+MONITORING_DIR="$DEPLOY_HOME/personal-crm-monitoring"
 # Certificate of the landing and the app.
 CERT_NAME="whobook.ru"
-# Certificate of the test stand, separate: getting or renewing it never touches the one above.
+# Certificates of the test stand and of Grafana, separate: getting or renewing one never touches the others.
 STAGING_CERT_NAME="test-app.whobook.ru"
+GRAFANA_CERT_NAME="grafana.whobook.ru"
 # Login and password of the test stand, written by staging-password.sh.
 STAGING_HTPASSWD="/etc/nginx/whobook-test-app.htpasswd"
+# Login and password of Grafana, written by grafana-password.sh.
+GRAFANA_HTPASSWD="/etc/nginx/whobook-grafana.htpasswd"
 EXPECTED_IP="153.76.175.142"
 ACME_ROOT="/var/www/letsencrypt"
 # Files that carry this marker belong to this script and may be overwritten by it.
@@ -103,7 +111,7 @@ EOF
 case "$EMAIL" in *?@?*.?*) ;; *) die "not an email address: $EMAIL" ;; esac
 
 log "DNS"
-for d in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN"; do
+for d in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN" "$GRAFANA_DOMAIN"; do
   ips=$(getent ahostsv4 "$d" | awk '{print $1}' | sort -u | xargs || true)
   [ "$ips" = "$EXPECTED_IP" ] || die "$d resolves to '$ips', expected $EXPECTED_IP. Fix the DNS A record first."
   info "$d -> $ips"
@@ -217,7 +225,7 @@ for group in docker systemd-journal; do
   fi
 done
 
-install -d -m 0700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$DEPLOY_HOME/.ssh" "$APP_DIR" "$APP_DIR-staging"
+install -d -m 0700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$DEPLOY_HOME/.ssh" "$APP_DIR" "$APP_DIR-staging" "$MONITORING_DIR"
 if [ -f "$SRC_DIR/deploy-authorized_keys" ]; then
   install -m 0600 -o "$DEPLOY_USER" -g "$DEPLOY_USER" \
     "$SRC_DIR/deploy-authorized_keys" "$DEPLOY_HOME/.ssh/authorized_keys"
@@ -230,6 +238,7 @@ else
 fi
 info "app folder: $APP_DIR (database credentials go to $APP_DIR/.env, mode 600)"
 info "test stand folder: $APP_DIR-staging (its own $APP_DIR-staging/.env, mode 600)"
+info "monitoring folder: $MONITORING_DIR (its own $MONITORING_DIR/.env, mode 600, see README \"Мониторинг\")"
 
 # ---------------------------------------------------------------- nginx
 log "nginx"
@@ -252,14 +261,15 @@ install -d -m 0755 /etc/nginx/snippets "$ACME_ROOT"
 install_managed "$SRC_DIR/nginx/snippets/whobook-acme.conf" /etc/nginx/snippets/whobook-acme.conf
 install_managed "$SRC_DIR/nginx/snippets/whobook-ssl.conf" /etc/nginx/snippets/whobook-ssl.conf
 install_managed "$SRC_DIR/nginx/snippets/whobook-test-app-ssl.conf" /etc/nginx/snippets/whobook-test-app-ssl.conf
+install_managed "$SRC_DIR/nginx/snippets/whobook-grafana-ssl.conf" /etc/nginx/snippets/whobook-grafana-ssl.conf
 install_managed "$SRC_DIR/nginx/sites/00-default.conf" /etc/nginx/sites-available/00-default.conf
 is_managed /etc/nginx/sites-available/00-default.conf \
   && ln -sfn /etc/nginx/sites-available/00-default.conf /etc/nginx/sites-enabled/00-default.conf
 
 # Site configs go to sites-available; they are enabled after the certificates exist (below).
-# Stub pages: whatever is in stubs/<domain>/ (the landing and the app: index.html; the app
-# and the test stand: unavailable.html, shown while the app container is down).
-for site in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN"; do
+# Stub pages: whatever is in stubs/<domain>/ (the landing and the app: index.html; the app, the test stand
+# and Grafana: unavailable.html, shown while their container is down).
+for site in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN" "$GRAFANA_DOMAIN"; do
   install_managed "$SRC_DIR/nginx/sites/$site.conf" "/etc/nginx/sites-available/$site.conf"
   install -d -m 0755 "/var/www/$site"
   for stub in "$SRC_DIR/stubs/$site"/*; do
@@ -278,6 +288,13 @@ else
   bash "$SRC_DIR/staging-password.sh"
 fi
 
+log "Grafana password"
+if [ -s "$GRAFANA_HTPASSWD" ]; then
+  info "already set in $GRAFANA_HTPASSWD. To change it: sudo bash $SRC_DIR/grafana-password.sh"
+else
+  bash "$SRC_DIR/grafana-password.sh"
+fi
+
 # ---------------------------------------------------------------- certificate
 log "certbot"
 if ! command -v certbot >/dev/null 2>&1; then
@@ -291,11 +308,12 @@ install -m 0755 "$SRC_DIR/certbot/reload-nginx.sh" /etc/letsencrypt/renewal-hook
 
 get_certificate "$CERT_NAME" "$LANDING_DOMAIN" "$APP_DOMAIN"
 get_certificate "$STAGING_CERT_NAME" "$STAGING_DOMAIN"
+get_certificate "$GRAFANA_CERT_NAME" "$GRAFANA_DOMAIN"
 # Left over if an earlier run stopped while getting a certificate.
 rm -f /etc/nginx/sites-enabled/whobook-bootstrap.conf /etc/nginx/sites-available/whobook-bootstrap.conf
 
 log "Enabling HTTPS sites"
-for site in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN"; do
+for site in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN" "$GRAFANA_DOMAIN"; do
   if is_managed "/etc/nginx/sites-available/$site.conf"; then
     ln -sfn "/etc/nginx/sites-available/$site.conf" "/etc/nginx/sites-enabled/$site.conf"
     info "enabled $site"
@@ -309,7 +327,7 @@ systemctl reload nginx
 log "Renewal"
 systemctl enable --now certbot.timer >/dev/null 2>&1
 systemctl list-timers certbot.timer --no-pager || true
-for name in "$CERT_NAME" "$STAGING_CERT_NAME"; do
+for name in "$CERT_NAME" "$STAGING_CERT_NAME" "$GRAFANA_CERT_NAME"; do
   certbot renew --dry-run --cert-name "$name" -q
   info "renewal dry run of $name: OK"
 done
@@ -388,10 +406,10 @@ info "certbot: $(certbot --version 2>&1)"
 info "journal: $(journalctl --disk-usage 2>/dev/null || true)"
 limit="$(journalctl -b -u systemd-journald -o cat 2>/dev/null | grep -E '^System Journal .* max ' | tail -n 1 || true)"
 [ -z "$limit" ] || info "journal limit: $limit"
-for name in "$CERT_NAME" "$STAGING_CERT_NAME"; do
+for name in "$CERT_NAME" "$STAGING_CERT_NAME" "$GRAFANA_CERT_NAME"; do
   certbot certificates --cert-name "$name" 2>/dev/null | grep -E 'Domains|Expiry' | sed 's/^ */    /' || true
 done
-for d in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN"; do
+for d in "$LANDING_DOMAIN" "$APP_DOMAIN" "$STAGING_DOMAIN" "$GRAFANA_DOMAIN"; do
   http=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --resolve "$d:80:127.0.0.1" "http://$d/" || true)
   https=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$d:443:127.0.0.1" "https://$d/" || true)
   info "$d: http -> $http | https -> $https"
@@ -399,5 +417,8 @@ done
 # The server itself passes without a password; through the public address a password is needed.
 public=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$STAGING_DOMAIN:443:$EXPECTED_IP" "https://$STAGING_DOMAIN/" || true)
 info "$STAGING_DOMAIN via $EXPECTED_IP without a password: $public (expected 401)"
+# Grafana asks for its password everywhere, the server itself included.
+grafana=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$GRAFANA_DOMAIN:443:127.0.0.1" "https://$GRAFANA_DOMAIN/" || true)
+info "$GRAFANA_DOMAIN without a password: $grafana (expected 401)"
 echo
 echo "DONE"
