@@ -4,7 +4,8 @@
 #   ssh crm-deploy personal-crm/deploy/backup.sh
 #
 # Writes backups/<UTC time>_daily_<app version>.dump, reads it back to make sure it can be restored,
-# then keeps the newest 7 daily backups. Backups taken before deploys are rotated separately (deploy.sh).
+# then keeps the newest 7 daily backups and tells the monitoring the time of the new one.
+# Backups taken before deploys are rotated separately (deploy.sh).
 # Only reads the database: it never starts, stops or restarts anything. If the database of prod is not
 # running, the backup fails and says so.
 # Waits for a running deploy or restore of prod (up to 10 minutes), and they wait for it.
@@ -30,5 +31,9 @@ export APP_IMAGE="$IMAGE_REPO:$version"
 log "Daily backup of the prod database (app version $version)"
 backup_db daily "$version"
 prune_backups daily
+
+# The monitoring sends an email when there has been no daily backup for too long (deploy/monitoring).
+# If it cannot be told, the backup itself is still good: the monitoring then warns about it later, not never.
+write_backup_metric || info "WARNING: could not tell the monitoring about this backup ($TEXTFILE_DIR/backup.prom)"
 
 log "BACKED UP to $BACKUP_FILE"

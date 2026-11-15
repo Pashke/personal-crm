@@ -1,0 +1,65 @@
+# What Prometheus collects, every 30 seconds. Everything is on 127.0.0.1: all containers of the monitoring
+# use the network of the server (deploy/monitoring/compose.yaml). How long the numbers are kept (30 days,
+# at most 1 GB) is set by the command line in compose.yaml. The alerts are Grafana's, not Prometheus's.
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # Prometheus itself.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+
+  # The server: processor, memory, disk. And the time of the newest daily backup (textfile, deploy/lib.sh).
+  - job_name: node
+    static_configs:
+      - targets: ["127.0.0.1:9100"]
+
+  # The prod database: is it up, sizes, connections. postgres-exporter is a service of deploy/compose.yaml.
+  - job_name: postgres
+    static_configs:
+      - targets: ["127.0.0.1:9187"]
+
+  # /health of prod and the test stand through nginx, via blackbox (modules in blackbox.yml).
+  # Prod is checked the way a visitor reaches it. The test stand is checked from the server itself,
+  # which nginx lets in without the stand password, like the smoke test of deploy.sh.
+  - job_name: health
+    metrics_path: /probe
+    static_configs:
+      - targets: ["https://app.whobook.ru/health"]
+        labels:
+          env: prod
+          module: http_health
+      - targets: ["https://127.0.0.1/health"]
+        labels:
+          env: staging
+          module: http_health_staging
+    relabel_configs: &probe-relabel
+      # The target becomes the parameter of the probe, the probe itself goes to blackbox.
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [module]
+        target_label: __param_module
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9115
+
+  # How many days the HTTPS certificates have left. whobook.ru shares its certificate with app.whobook.ru.
+  - job_name: certs
+    metrics_path: /probe
+    static_configs:
+      - targets: ["app.whobook.ru:443"]
+        labels:
+          site: app.whobook.ru
+          module: tls_cert
+      - targets: ["test-app.whobook.ru:443"]
+        labels:
+          site: test-app.whobook.ru
+          module: tls_cert
+      - targets: ["grafana.whobook.ru:443"]
+        labels:
+          site: grafana.whobook.ru
+          module: tls_cert
+    relabel_configs: *probe-relabel

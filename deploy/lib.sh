@@ -17,6 +17,11 @@ BACKUP_DIR="$PROD_DIR/backups"
 # KEEP_BACKUPS of each kind are kept. Copies taken by restore.sh are kept until deleted by hand.
 KEEP_BACKUPS=7
 
+# The monitoring (deploy/monitoring, deploy/monitoring.sh): one for the whole server, in its own folder
+# with its own .env. node_exporter reads the *.prom files of TEXTFILE_DIR and gives their numbers to Prometheus.
+MONITORING_DIR="$DEPLOY_HOME/personal-crm-monitoring"
+TEXTFILE_DIR="$MONITORING_DIR/textfile"
+
 log()  { printf '\n==> %s\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
 die()  { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
@@ -33,6 +38,8 @@ use_env() {
       # No memory limits on prod: 0 means no limit.
       APP_MEMORY_LIMIT=0
       POSTGRES_MEMORY_LIMIT=0
+      # The metrics of the prod database for the monitoring (service postgres-exporter in compose.yaml).
+      COMPOSE_PROFILES=monitoring
       ;;
     staging)
       APP_DIR="$STAGING_DIR"
@@ -42,6 +49,8 @@ use_env() {
       # The app limit also applies to the one-off containers made from the app image (migrations).
       APP_MEMORY_LIMIT=512m
       POSTGRES_MEMORY_LIMIT=256m
+      # No database metrics on the test stand: a stopped stand database shows as "test stand does not answer".
+      COMPOSE_PROFILES=
       ;;
     *) die "unknown environment \"$ENV_NAME\": expected prod or staging" ;;
   esac
@@ -55,7 +64,7 @@ use_env() {
   PREVIOUS_FILE="$STATE_DIR/previous-version"
   # One deploy at a time per environment (see wait_for_lock).
   LOCK_FILE="$STATE_DIR/deploy.lock"
-  export APP_URL APP_PORT APP_MEMORY_LIMIT POSTGRES_MEMORY_LIMIT
+  export APP_URL APP_PORT APP_MEMORY_LIMIT POSTGRES_MEMORY_LIMIT COMPOSE_PROFILES
 }
 
 # docker compose for the stack of the current environment. APP_IMAGE must be exported before the call.
@@ -207,6 +216,39 @@ backup_db() {
   mv "$partial" "$file"
   BACKUP_FILE="$file"
   info "saved $file ($(du -h "$file" | cut -f1))"
+}
+
+# Tells the monitoring when the newest finished daily backup of prod was taken: writes the time of that file
+# to TEXTFILE_DIR/backup.prom, as metric personal_crm_daily_backup_last_success_timestamp_seconds. Only finished
+# backups count: a dump is written as .partial and gets its final name after it was read back.
+# backup.sh calls it after each daily backup, monitoring.sh on each update of the monitoring.
+# No daily backup at all: nothing is written, the monitoring reports "no data". Non-zero if writing failed.
+write_backup_metric() {
+  local files newest="" taken tmp
+  shopt -s nullglob
+  files=("$BACKUP_DIR"/*_daily_*.dump)
+  shopt -u nullglob
+  # Names start with the UTC time: in sorted order the newest comes last.
+  [ "${#files[@]}" -eq 0 ] || newest="${files[${#files[@]} - 1]}"
+  if [ -z "$newest" ]; then
+    info "no daily backup yet: nothing to tell the monitoring"
+    return 0
+  fi
+  taken="$(stat -c %Y "$newest")" || return 1
+  mkdir -p "$TEXTFILE_DIR" || return 1
+  # Written under a temporary name that node_exporter ignores, then renamed: it never reads half a file.
+  # Readable by everyone: node_exporter runs as user nobody in its container.
+  tmp="$(mktemp "$TEXTFILE_DIR/.backup.prom.XXXXXX")" || return 1
+  if ! {
+    printf '# HELP personal_crm_daily_backup_last_success_timestamp_seconds %s\n' \
+      "Time of the newest finished daily backup of the prod database (Unix time)."
+    printf '# TYPE personal_crm_daily_backup_last_success_timestamp_seconds gauge\n'
+    printf 'personal_crm_daily_backup_last_success_timestamp_seconds %s\n' "$taken"
+  } > "$tmp" || ! chmod 644 "$tmp" || ! mv "$tmp" "$TEXTFILE_DIR/backup.prom"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  info "told the monitoring: the newest daily backup is ${newest##*/}"
 }
 
 # Deletes the oldest backups of one kind, keeping the newest KEEP_BACKUPS of it.

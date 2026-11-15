@@ -1,0 +1,17 @@
+# Where the alerts go: one email to the owner. The address is ALERT_EMAIL from the .env of the monitoring
+# on the server, not from git: the repository is public. The texts are in templates.yaml.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: owner-email
+    receivers:
+      - uid: owner-email
+        type: email
+        # Also an email when the alert is gone ("Починилось: ...").
+        disableResolveMessage: false
+        settings:
+          addresses: $ALERT_EMAIL
+          singleEmail: true
+          subject: '{{ template "crm.subject" . }}'
+          message: '{{ template "crm.message" . }}'

@@ -1,0 +1,40 @@
+# How blackbox checks the sites (prometheus.yml says what to check with which module).
+# IPv4 only: nginx on the server listens on IPv4.
+modules:
+  # /health of prod, the way a visitor reaches it: DNS, certificate, nginx, app, database (/health checks it).
+  http_health:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      valid_status_codes: [200]
+      follow_redirects: false
+      fail_if_not_ssl: true
+
+  # /health of the test stand: the request goes to nginx on 127.0.0.1 with the stand's name, like
+  # curl --resolve test-app.whobook.ru:443:127.0.0.1 in the smoke test of deploy.sh. nginx lets requests
+  # from the server itself in without the stand password. The certificate is checked for the stand's name.
+  http_health_staging:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      valid_status_codes: [200]
+      follow_redirects: false
+      fail_if_not_ssl: true
+      headers:
+        Host: test-app.whobook.ru
+      tls_config:
+        server_name: test-app.whobook.ru
+
+  # A TLS connection only, no HTTP request: gives the dates of the certificate (probe_ssl_earliest_cert_expiry),
+  # whatever password the site asks for.
+  tls_cert:
+    prober: tcp
+    timeout: 10s
+    tcp:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      tls: true

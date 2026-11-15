@@ -1,0 +1,286 @@
+# The alerts. Grafana checks every rule once a minute; when its condition has held for "for", it sends an
+# email (contact-points.yaml, policies.yaml) and another one when the condition is gone. The texts the owner
+# reads are in Russian: summary goes to the subject ("Тревога: <summary>"), description to the body.
+#
+# No data (an exporter or Prometheus is down) counts as a firing alert too (noDataState, execErrState):
+# after the same "for", the email says "нет данных". $values is empty then, which the texts check.
+# Annotations are not touched by the provisioning's $VARIABLE substitution, so $values and $labels are safe here.
+#
+# Every query returns a number all the time, and a threshold expression decides: a query that returned
+# nothing when everything is fine would look like "no data".
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: personal-crm
+    folder: Мониторинг
+    interval: 1m
+    rules:
+      - uid: crm-prod-down
+        title: Прод не отвечает
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: probe_success{job="health", env="prod"}
+              instant: true
+              range: false
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              datasource: {type: __expr__, uid: __expr__}
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 3m
+        annotations:
+          summary: 'прод не отвечает{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          description: >-
+            {{ if eq (len $values) 0 }}Нет данных: проверка прода не работает, потому что не отвечает часть мониторинга (blackbox или Prometheus).
+            {{ else }}https://app.whobook.ru/health не отвечает 200 уже 3 минуты.{{ end }}
+        isPaused: false
+
+      - uid: crm-staging-down
+        title: Тест-стенд не отвечает
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: probe_success{job="health", env="staging"}
+              instant: true
+              range: false
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              datasource: {type: __expr__, uid: __expr__}
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 3m
+        annotations:
+          summary: 'тест-стенд не отвечает{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          description: >-
+            {{ if eq (len $values) 0 }}Нет данных: проверка тест-стенда не работает, потому что не отвечает часть мониторинга (blackbox или Prometheus).
+            {{ else }}https://test-app.whobook.ru/health не отвечает 200 уже 3 минуты.{{ end }}
+        isPaused: false
+
+      - uid: crm-daily-backup
+        title: Ночной бэкап не снялся
+        condition: C
+        data:
+          # Hours since the newest finished daily backup (backup.sh writes its time, deploy/lib.sh).
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: (time() - personal_crm_daily_backup_last_success_timestamp_seconds{job="node"}) / 3600
+              instant: true
+              range: false
+          # The same time shifted to Moscow (UTC+3 all year), only to print it in the email.
+          - refId: B
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: B
+              expr: personal_crm_daily_backup_last_success_timestamp_seconds{job="node"} + 3 * 3600
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              datasource: {type: __expr__, uid: __expr__}
+              conditions:
+                - evaluator: {type: gt, params: [26]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: 'ночной бэкап не снялся{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          description: >-
+            {{ if eq (len $values) 0 }}Нет данных о бэкапе: не отвечает часть мониторинга, или на сервере нет ни одного ночного бэкапа.
+            {{ else }}Последний удачный ночной бэкап снят {{ (toTime $values.B.Value).Format "02.01.2006 в 15:04" }} по Москве, {{ printf "%.0f" $values.A.Value }} ч назад. Бэкап снимается каждый день в 03:00.{{ end }}
+        isPaused: false
+
+      - uid: crm-cert-expiry
+        title: Сертификат скоро истечёт
+        condition: B
+        data:
+          # Days left, one number per site (label "site").
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: (probe_ssl_earliest_cert_expiry{job="certs"} - time()) / 86400
+              instant: true
+              range: false
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              datasource: {type: __expr__, uid: __expr__}
+              conditions:
+                - evaluator: {type: lt, params: [14]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: 'сертификат скоро истечёт{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          description: >-
+            {{ if eq (len $values) 0 }}Нет данных о сертификатах: не отвечает часть мониторинга (blackbox или Prometheus).
+            {{ else }}Сертификату {{ $labels.site }} осталось {{ printf "%.0f" $values.A.Value }} дн. certbot продлевает сертификаты за 30 дней до конца, значит, продление не удаётся уже больше двух недель.{{ end }}
+        isPaused: false
+
+      - uid: crm-disk
+        title: Диск почти заполнен
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 100 * (1 - node_filesystem_avail_bytes{job="node", mountpoint="/"} / node_filesystem_size_bytes{job="node", mountpoint="/"})
+              instant: true
+              range: false
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              datasource: {type: __expr__, uid: __expr__}
+              conditions:
+                - evaluator: {type: gt, params: [80]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: 'диск почти заполнен{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          description: >-
+            {{ if eq (len $values) 0 }}Нет данных о диске: не отвечает часть мониторинга (node-exporter или Prometheus).
+            {{ else }}Диск сервера занят на {{ printf "%.0f" $values.A.Value }}% больше 10 минут.{{ end }}
+        isPaused: false
+
+      - uid: crm-memory
+        title: Мало памяти
+        condition: C
+        data:
+          # Free memory in MB, for the email.
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: node_memory_MemAvailable_bytes{job="node"} / 1024 / 1024
+              instant: true
+              range: false
+          # Free memory in percent: the condition.
+          - refId: B
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: B
+              expr: 100 * node_memory_MemAvailable_bytes{job="node"} / node_memory_MemTotal_bytes{job="node"}
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              datasource: {type: __expr__, uid: __expr__}
+              conditions:
+                - evaluator: {type: lt, params: [10]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: 'мало памяти{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          description: >-
+            {{ if eq (len $values) 0 }}Нет данных о памяти: не отвечает часть мониторинга (node-exporter или Prometheus).
+            {{ else }}Свободно {{ printf "%.0f" $values.A.Value }} МБ памяти ({{ printf "%.0f" $values.B.Value }}%) больше 10 минут.{{ end }}
+        isPaused: false
+
+      - uid: crm-cpu
+        title: Процессор загружен
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 100 * (1 - avg(rate(node_cpu_seconds_total{job="node", mode="idle"}[5m])))
+              instant: true
+              range: false
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              datasource: {type: __expr__, uid: __expr__}
+              conditions:
+                - evaluator: {type: gt, params: [90]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 15m
+        annotations:
+          summary: 'процессор загружен{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          description: >-
+            {{ if eq (len $values) 0 }}Нет данных о процессоре: не отвечает часть мониторинга (node-exporter или Prometheus).
+            {{ else }}Процессор загружен на {{ printf "%.0f" $values.A.Value }}% больше 15 минут.{{ end }}
+        isPaused: false
+
+      - uid: crm-prod-db
+        title: База прода не отвечает
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: pg_up{job="postgres"}
+              instant: true
+              range: false
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              datasource: {type: __expr__, uid: __expr__}
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: 'база прода не отвечает{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          description: >-
+            {{ if eq (len $values) 0 }}Нет данных о базе прода: не отвечает сборщик цифр базы (logs.sh prod postgres-exporter) или Prometheus.
+            {{ else }}База прода не отвечает больше 2 минут.{{ end }}
+        isPaused: false

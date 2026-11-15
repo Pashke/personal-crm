@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploys one version of the app to one environment on the server, as user "deploy":
 #   prod:    database backup (the newest 7 deploy backups are kept) -> image -> migrations (one-off container)
-#            -> new app container -> smoke /health -> cleanup of images older than 2 weeks that no environment needs;
+#            -> new app container -> smoke /health -> database metrics for the monitoring (postgres-exporter)
+#            -> cleanup of images older than 2 weeks that no environment needs;
 #   staging: (database still empty: load a copy of the newest prod backup) -> image -> migrations
 #            -> new app container -> smoke /health. No backup.
 # GitHub Actions calls it through deploy/ci-deploy.sh: the test stand on every push to main (Deploy staging),
@@ -113,6 +114,19 @@ previous="$(read_version "$PREVIOUS_FILE")"
 log "Versions on $ENV_NAME"
 info "current:  $TAG"
 info "previous: ${previous:-none}"
+
+# ---------------------------------------------------------------- database metrics
+# The monitoring (deploy/monitoring) reads the metrics of the prod database from postgres-exporter,
+# a service of compose.yaml that only prod has. The new version is already running and healthy: if the
+# exporter does not start, the deploy stays green, and the monitoring sends a "no data" alert about it.
+if [ "$ENV_NAME" = prod ]; then
+  log "Database metrics for the monitoring"
+  if compose up --detach --wait --wait-timeout 60 postgres-exporter < /dev/null; then
+    info "postgres-exporter is running"
+  else
+    info "WARNING: postgres-exporter did not start, see logs.sh prod postgres-exporter. The app itself is deployed"
+  fi
+fi
 
 # ---------------------------------------------------------------- cleanup
 # Prod and the test stand share the images. Only a prod deploy cleans up, so the disk does not fill up.

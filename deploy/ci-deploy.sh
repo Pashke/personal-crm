@@ -8,13 +8,14 @@
 #                                 the test stand, deploys it to prod
 #   ci-deploy.sh prod-rollback  - Deploy prod with the rollback box: the prod version before the current one,
 #                                 which the server remembers (rollback.sh); no test stand check
+#   ci-deploy.sh monitoring     - Deploy prod, after the app: updates the monitoring of the server (monitoring.sh)
 # The prod modes write to the run summary which version was deployed.
 #
 # Environment (set by the workflows):
 #   DEPLOY_HOST, DEPLOY_USER, DEPLOY_KNOWN_HOSTS  - where to connect, and the server's SSH host key
 #   DEPLOY_SSH_KEY                                - private deploy key (GitHub secret)
-#   REGISTRY_USER, REGISTRY_TOKEN                 - lets the server pull the image from GHCR
-#   IMAGE_TAG                                     - staging: git commit SHA = image tag
+#   REGISTRY_USER, REGISTRY_TOKEN                 - lets the server pull the image from GHCR (not for monitoring)
+#   IMAGE_TAG                                    - staging: git commit SHA = image tag
 #   INPUT_SHA                                     - prod: the SHA field of Deploy prod, may be empty
 #   GH_TOKEN                                      - prod: reads the Deploy staging history and commits with gh
 #   GITHUB_REF, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_STEP_SUMMARY - set by GitHub Actions
@@ -29,7 +30,9 @@ MODE="${1:-}"
 case "$MODE" in
   staging) ENVIRONMENT=staging; REMOTE_APP_DIR="personal-crm-staging" ;;
   prod | prod-rollback) ENVIRONMENT=prod; REMOTE_APP_DIR="personal-crm" ;;
-  *) die "usage: ci-deploy.sh <staging|prod|prod-rollback>" ;;
+  # The monitoring has a folder of its own (MONITORING_DIR in deploy/lib.sh): its settings and a copy of deploy/.
+  monitoring) ENVIRONMENT=monitoring; REMOTE_APP_DIR="personal-crm-monitoring" ;;
+  *) die "usage: ci-deploy.sh <staging|prod|prod-rollback|monitoring>" ;;
 esac
 
 # Successful runs of this workflow on main are the history of the test stand: only their commits go to prod.
@@ -39,7 +42,10 @@ STAGING_WORKFLOW="deploy-staging.yml"
 [ "${GITHUB_REF:-}" = "refs/heads/main" ] \
   || die "deploys run from main only, this run is on ${GITHUB_REF:-an unknown ref}. Start it again from main"
 
-for name in DEPLOY_HOST DEPLOY_USER DEPLOY_KNOWN_HOSTS DEPLOY_SSH_KEY REGISTRY_USER REGISTRY_TOKEN; do
+required=(DEPLOY_HOST DEPLOY_USER DEPLOY_KNOWN_HOSTS DEPLOY_SSH_KEY)
+# The app's image comes from GHCR; the monitoring pulls public images from Docker Hub.
+[ "$MODE" = monitoring ] || required+=(REGISTRY_USER REGISTRY_TOKEN)
+for name in "${required[@]}"; do
   [ -n "${!name:-}" ] || die "$name is not set"
 done
 
@@ -150,6 +156,10 @@ tar -C "$DEPLOY_DIR" --exclude=./server-setup --exclude='./ci-*.sh' -czf - . \
 if [ "$MODE" = prod-rollback ]; then
   log "Running rollback.sh on the server"
   remote "bash $REMOTE_APP_DIR/deploy/rollback.sh" < /dev/null
+elif [ "$MODE" = monitoring ]; then
+  log "Running monitoring.sh on the server"
+  remote "bash $REMOTE_APP_DIR/deploy/monitoring.sh" < /dev/null
+  summary "### Monitoring updated" "" "- https://grafana.whobook.ru"
 else
   log "Running deploy.sh $ENVIRONMENT on the server"
   printf '%s' "$REGISTRY_TOKEN" \
