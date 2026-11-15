@@ -3,7 +3,9 @@
 # reads are in Russian: summary goes to the subject ("Тревога: <summary>"), description to the body.
 #
 # No data (an exporter or Prometheus is down) counts as a firing alert too (noDataState, execErrState):
-# after the same "for", the email says "нет данных". $values is empty then, which the texts check.
+# after the same "for", the email says "нет данных" and its body is the no_data text. Grafana marks such an alert
+# with the annotation grafana_state_reason (NoData or Error), and the email template (templates.yaml) checks it:
+# the other annotations still hold the texts of the last evaluation that had data, with its old numbers.
 # Annotations are not touched by the provisioning's $VARIABLE substitution, so $values and $labels are safe here.
 #
 # Every query returns a number all the time, and a threshold expression decides: a query that returned
@@ -41,10 +43,9 @@ groups:
         execErrState: Alerting
         for: 3m
         annotations:
-          summary: 'прод не отвечает{{ if eq (len $values) 0 }} (нет данных){{ end }}'
-          description: >-
-            {{ if eq (len $values) 0 }}Нет данных: проверка прода не работает, потому что не отвечает часть мониторинга (blackbox или Prometheus).
-            {{ else }}https://app.whobook.ru/health не отвечает 200 уже 3 минуты.{{ end }}
+          summary: прод не отвечает
+          description: https://app.whobook.ru/health не отвечает 200 уже 3 минуты.
+          no_data: 'Нет данных: проверка прода не работает, потому что не отвечает часть мониторинга (blackbox или Prometheus).'
         isPaused: false
 
       - uid: crm-staging-down
@@ -72,10 +73,9 @@ groups:
         execErrState: Alerting
         for: 3m
         annotations:
-          summary: 'тест-стенд не отвечает{{ if eq (len $values) 0 }} (нет данных){{ end }}'
-          description: >-
-            {{ if eq (len $values) 0 }}Нет данных: проверка тест-стенда не работает, потому что не отвечает часть мониторинга (blackbox или Prometheus).
-            {{ else }}https://test-app.whobook.ru/health не отвечает 200 уже 3 минуты.{{ end }}
+          summary: тест-стенд не отвечает
+          description: https://test-app.whobook.ru/health не отвечает 200 уже 3 минуты.
+          no_data: 'Нет данных: проверка тест-стенда не работает, потому что не отвечает часть мониторинга (blackbox или Prometheus).'
         isPaused: false
 
       - uid: crm-daily-backup
@@ -113,10 +113,10 @@ groups:
         execErrState: Alerting
         for: 10m
         annotations:
-          summary: 'ночной бэкап не снялся{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          summary: ночной бэкап не снялся
           description: >-
-            {{ if eq (len $values) 0 }}Нет данных о бэкапе: не отвечает часть мониторинга, или на сервере нет ни одного ночного бэкапа.
-            {{ else }}Последний удачный ночной бэкап снят {{ (toTime $values.B.Value).Format "02.01.2006 в 15:04" }} по Москве, {{ printf "%.0f" $values.A.Value }} ч назад. Бэкап снимается каждый день в 03:00.{{ end }}
+            Последний удачный ночной бэкап снят {{ (toTime $values.B.Value).Format "02.01.2006 в 15:04" }} по Москве, {{ printf "%.0f" $values.A.Value }} ч назад. Бэкап снимается каждый день в 03:00.
+          no_data: 'Нет данных о бэкапе: не отвечает часть мониторинга (node-exporter или Prometheus), или на сервере нет ни одного ночного бэкапа.'
         isPaused: false
 
       - uid: crm-cert-expiry
@@ -145,10 +145,10 @@ groups:
         execErrState: Alerting
         for: 10m
         annotations:
-          summary: 'сертификат скоро истечёт{{ if eq (len $values) 0 }} (нет данных){{ end }}'
+          summary: сертификат скоро истечёт
           description: >-
-            {{ if eq (len $values) 0 }}Нет данных о сертификатах: не отвечает часть мониторинга (blackbox или Prometheus).
-            {{ else }}Сертификату {{ $labels.site }} осталось {{ printf "%.0f" $values.A.Value }} дн. certbot продлевает сертификаты за 30 дней до конца, значит, продление не удаётся уже больше двух недель.{{ end }}
+            Сертификату {{ $labels.site }} осталось {{ printf "%.0f" $values.A.Value }} дн. certbot продлевает сертификаты за 30 дней до конца, значит, продление не удаётся уже больше двух недель.
+          no_data: 'Нет данных о сертификатах: не отвечает часть мониторинга (blackbox или Prometheus).'
         isPaused: false
 
       - uid: crm-disk
@@ -176,10 +176,9 @@ groups:
         execErrState: Alerting
         for: 10m
         annotations:
-          summary: 'диск почти заполнен{{ if eq (len $values) 0 }} (нет данных){{ end }}'
-          description: >-
-            {{ if eq (len $values) 0 }}Нет данных о диске: не отвечает часть мониторинга (node-exporter или Prometheus).
-            {{ else }}Диск сервера занят на {{ printf "%.0f" $values.A.Value }}% больше 10 минут.{{ end }}
+          summary: диск почти заполнен
+          description: Диск сервера занят на {{ printf "%.0f" $values.A.Value }}% больше 10 минут.
+          no_data: 'Нет данных о диске: не отвечает часть мониторинга (node-exporter или Prometheus).'
         isPaused: false
 
       - uid: crm-memory
@@ -217,10 +216,9 @@ groups:
         execErrState: Alerting
         for: 10m
         annotations:
-          summary: 'мало памяти{{ if eq (len $values) 0 }} (нет данных){{ end }}'
-          description: >-
-            {{ if eq (len $values) 0 }}Нет данных о памяти: не отвечает часть мониторинга (node-exporter или Prometheus).
-            {{ else }}Свободно {{ printf "%.0f" $values.A.Value }} МБ памяти ({{ printf "%.0f" $values.B.Value }}%) больше 10 минут.{{ end }}
+          summary: мало памяти
+          description: Свободно {{ printf "%.0f" $values.A.Value }} МБ памяти ({{ printf "%.0f" $values.B.Value }}%) больше 10 минут.
+          no_data: 'Нет данных о памяти: не отвечает часть мониторинга (node-exporter или Prometheus).'
         isPaused: false
 
       - uid: crm-cpu
@@ -248,10 +246,9 @@ groups:
         execErrState: Alerting
         for: 15m
         annotations:
-          summary: 'процессор загружен{{ if eq (len $values) 0 }} (нет данных){{ end }}'
-          description: >-
-            {{ if eq (len $values) 0 }}Нет данных о процессоре: не отвечает часть мониторинга (node-exporter или Prometheus).
-            {{ else }}Процессор загружен на {{ printf "%.0f" $values.A.Value }}% больше 15 минут.{{ end }}
+          summary: процессор загружен
+          description: Процессор загружен на {{ printf "%.0f" $values.A.Value }}% больше 15 минут.
+          no_data: 'Нет данных о процессоре: не отвечает часть мониторинга (node-exporter или Prometheus).'
         isPaused: false
 
       - uid: crm-prod-db
@@ -279,8 +276,7 @@ groups:
         execErrState: Alerting
         for: 2m
         annotations:
-          summary: 'база прода не отвечает{{ if eq (len $values) 0 }} (нет данных){{ end }}'
-          description: >-
-            {{ if eq (len $values) 0 }}Нет данных о базе прода: не отвечает сборщик цифр базы (logs.sh prod postgres-exporter) или Prometheus.
-            {{ else }}База прода не отвечает больше 2 минут.{{ end }}
+          summary: база прода не отвечает
+          description: База прода не отвечает больше 2 минут.
+          no_data: 'Нет данных о базе прода: не отвечает сборщик цифр базы (logs.sh prod postgres-exporter) или Prometheus.'
         isPaused: false

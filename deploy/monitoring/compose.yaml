@@ -64,6 +64,8 @@ services:
       - --collector.textfile.directory=/textfile
     volumes:
       - /:/host:ro,rslave
+      # Names of the disks for the diskstats collector; without it node_exporter logs an error at every start.
+      - /run/udev:/run/udev:ro
       - ${TEXTFILE_DIR:?TEXTFILE_DIR is not set, run this through deploy/monitoring.sh}:/textfile:ro
     mem_limit: 48m
     logging: *logging
